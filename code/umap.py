@@ -11,6 +11,7 @@ class UMAPEncoder:
         self.out_dim = out_dim
         self.id = id
         self.sigmas = None
+        self.rhos = None
 
     def get_sigmas(self, dists: torch.Tensor, min_dists: torch.Tensor, num_iters: int = 20) -> torch.Tensor:
         def diff(sigmas: torch.Tensor) -> torch.Tensor:
@@ -109,6 +110,8 @@ class UMAPEncoder:
             min_dists = dists.min(dim=1).values.unsqueeze(1).repeat(1, self.k_neighbors)
             sigmas = self.get_sigmas(dists, min_dists)
             weights = torch.exp(- (dists - min_dists) / sigmas.unsqueeze(1)).flatten()
+            if mode == "fit":
+                self.rhos = min_dists[:, 0]  # First column contains the min dist
         else:
             weights = 1.0 / (1.0 + a * dists.pow(2 * b)).flatten()
 
@@ -132,19 +135,13 @@ class UMAPEncoder:
         return vectors[:, 1:]
     
     @torch.no_grad()
-    def embed_query(self, orig: torch.Tensor, graph: torch.Tensor) -> torch.Tensor:
+    def embed_query(self, input: torch.Tensor, graph: torch.Tensor) -> torch.Tensor:
         row_sums = graph.sum(dim=1).to_dense().clamp(min=1e-6)
         indices = graph.indices()
         values = graph.values() / row_sums[indices[0]]
         normalized = torch.sparse_coo_tensor(indices, values, graph.shape)
 
-        return sp.mm(normalized, orig)
-
-    @torch.no_grad()
-    def embed_inv(self, query: torch.Tensor, graph: torch.Tensor) -> torch.Tensor:
-        indices, values = graph.indices(), graph.values()
-
-        return (values.unsqueeze(1) * query[indices]).sum(dim=1)
+        return sp.mm(normalized, input)
 
     def init(self, input: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref: torch.Tensor | None = None, a: float | None = None, b: float | None = None) -> tuple[torch.Tensor, torch.Tensor]:
         if mode not in ["fit", "transform", "invert"]:
@@ -154,10 +151,8 @@ class UMAPEncoder:
         if mode == "fit":
             graph = (graph + graph.transpose(0, 1) - graph * graph.transpose(0, 1)).coalesce() # Symmetrize fuzzy adjacency matrix
             embed = self.embed_all(graph)
-        elif mode == "transform":
-            embed = self.embed_query(ref, graph)
         else:
-            embed = self.embed_inv(ref, graph)
+            embed = self.embed_query(input, graph)
 
         return graph, embed
 
@@ -172,6 +167,7 @@ class UMAPMixture:
 
         self.encoders = [UMAPEncoder(k_neighbors, out_dim, id=i) for i in range(num_encoders)]
 
+        self.data = None
         self.graphs = []
         self.embeds = []
 
@@ -212,7 +208,7 @@ class UMAPMixture:
         loss = dist / (weight * sigma[j_idx] + 1e-6).mean()
         return loss
 
-    def _inv_rep_loss(self, embeds: torch.Tensor, i_idx: torch.Tensor, j_idx: torch.Tensor, ref: torch.Tensor, sigma: torch.Tensor) -> torch.Tensor:
+    def _inv_rep_loss(self, embeds: torch.Tensor, i_idx: torch.Tensor, j_idx: torch.Tensor, ref: torch.Tensor, sigma: torch.Tensor, rho: torch.Tensor) -> torch.Tensor:
         if i_idx.size(0) == 0:
             return torch.tensor(0.0, requires_grad=True)
 
@@ -220,8 +216,7 @@ class UMAPMixture:
         embeds_j = ref[j_idx]
 
         dist = ((embeds_i - embeds_j).pow(2)).sum(dim=1).clamp(min=1e-6)
-        rho = embeds[j_idx].min(dim=1).values
-        weight = (- (dist - rho).clamp(min=1e-6) / (sigma[j_idx] + 1e-6)).exp()
+        weight = (- (dist - rho[j_idx]).clamp(min=1e-6) / (sigma[j_idx] + 1e-6)).exp()
 
         loss = -torch.log(1 - weight + 1e-6).mean()
         return loss
@@ -277,6 +272,8 @@ class UMAPMixture:
                 ref_embed = None
                 if mode == "transform":
                     ref_embed = self.embeds[data_indices[i]] if data_indices is not None else self.embeds[i]
+                elif mode == "invert":
+                    ref_embed = self.data[data_indices[i]] if data_indices is not None else self.data[i]
 
                 count = embed.size(0)
                 batch_losses = []
@@ -304,7 +301,7 @@ class UMAPMixture:
                     l_idx_rep = torch.randint(0, count, (num_pairs, num_rep)).flatten()
 
                     if mode == "invert":
-                        loss_rep = self._inv_rep_loss(embed, i_idx_rep, l_idx_rep, ref_embed, self.encoders[i].sigmas)
+                        loss_rep = self._inv_rep_loss(embed, i_idx_rep, l_idx_rep, ref_embed, self.encoders[i].sigmas, self.encoders[i].rhos)
                     else:
                         loss_rep = self._umap_rep_loss(embed, i_idx_rep, l_idx_rep, self.a, self.b, ref_embed)
 
@@ -350,6 +347,7 @@ class UMAPMixture:
     def fit(self, inputs: list[torch.Tensor], epochs: int, num_rep: int = 8, lr: float = 0.2, alpha: float = 0.5, batch_size: int = 512) -> torch.Tensor | None:
         graphs, embeds = self.init(inputs, mode="fit")
         self.graphs = graphs
+        self.data = inputs
 
         self._train(
             embeds,
@@ -438,7 +436,7 @@ class UMAPMixture:
             if mode == "fit":
                 graph, embed = encoder.init(inputs[i], mode="fit")
             elif mode == "transform":
-                graph, embed = encoder.init(self.embeds[i], mode="transform", query=inputs[i], ref=self.graphs[i])
+                graph, embed = encoder.init(self.data[i], mode="transform", query=inputs[i], ref=self.graphs[i])
             else:
                 graph, embed = encoder.init(self.embeds[i], mode="invert", query=inputs[i], ref=self.graphs[i])
             graphs.append(graph)
