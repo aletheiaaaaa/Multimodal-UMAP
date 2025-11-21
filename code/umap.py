@@ -31,7 +31,10 @@ class UMAPEncoder:
         self.sigmas = sigmas.detach()
         return self.sigmas
 
-    def fuzzy_knn_graph(self, inputs: torch.Tensor, query: torch.Tensor | None = None, ref: torch.Tensor | None = None, num_iters: int = 10) -> torch.Tensor:
+    def fuzzy_knn_graph(self, inputs: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref: torch.Tensor | None = None, num_iters: int = 10, a: float | None = None, b: float | None = None) -> torch.Tensor:
+        if mode not in ["fit", "transform", "invert"]:
+            raise ValueError(f"Invalid mode: {mode}")
+
         N = inputs.size(0)
         Q = query.size(0) if ref is not None else N
 
@@ -102,9 +105,12 @@ class UMAPEncoder:
             ones = torch.ones(rows.size(0))
 
         dists = dists.view(Q, self.k_neighbors)
-        min_dists = dists.min(dim=1).values.unsqueeze(1).repeat(1, self.k_neighbors)
-        sigmas = self.get_sigmas(dists, min_dists)
-        weights = torch.exp(- (dists - min_dists) / sigmas.unsqueeze(1)).flatten()
+        if mode != "invert":
+            min_dists = dists.min(dim=1).values.unsqueeze(1).repeat(1, self.k_neighbors)
+            sigmas = self.get_sigmas(dists, min_dists)
+            weights = torch.exp(- (dists - min_dists) / sigmas.unsqueeze(1)).flatten()
+        else:
+            weights = 1.0 / (1.0 + a * dists.pow(2 * b)).flatten()
 
         adj = torch.sparse_coo_tensor(torch.stack([rows, cols], dim=0), weights, (Q, N))
         return adj
@@ -134,16 +140,24 @@ class UMAPEncoder:
 
         return sp.mm(normalized, orig)
 
-    def init(self, input: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+    @torch.no_grad()
+    def embed_inv(self, query: torch.Tensor, graph: torch.Tensor) -> torch.Tensor:
+        indices, values = graph.indices(), graph.values()
+
+        return (values.unsqueeze(1) * query[indices]).sum(dim=1)
+
+    def init(self, input: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref: torch.Tensor | None = None, a: float | None = None, b: float | None = None) -> tuple[torch.Tensor, torch.Tensor]:
         if mode not in ["fit", "transform", "invert"]:
             raise ValueError(f"Invalid mode: {mode}")
 
-        graph = self.fuzzy_knn_graph(input, query, ref, num_iters=10)
+        graph = self.fuzzy_knn_graph(input, mode, query, ref, num_iters=10, a=a, b=b)
         if mode == "fit":
             graph = (graph + graph.transpose(0, 1) - graph * graph.transpose(0, 1)).coalesce() # Symmetrize fuzzy adjacency matrix
             embed = self.embed_all(graph)
-        else:  # mode == "transform"
+        elif mode == "transform":
             embed = self.embed_query(ref, graph)
+        else:
+            embed = self.embed_inv(ref, graph)
 
         return graph, embed
 
@@ -369,6 +383,24 @@ class UMAPMixture:
             mode="transform",
             data_indices=data_indices,
             desc=f"Embedding {len(embeds)} modalities"
+        )
+
+        return embeds
+    
+    def inverse_transform(self, inputs: list[torch.Tensor], epochs: int, data_indices: list | None = None, num_rep: int = 8, lr: float = 0.2, alpha: float = 0.5, batch_size: int = 512) -> torch.Tensor:
+        graphs, embeds = self.init(inputs, mode="invert")
+
+        self._train(
+            embeds,
+            graphs,
+            epochs,
+            num_rep,
+            lr,
+            alpha,
+            batch_size,
+            mode="invert",
+            data_indices=data_indices,
+            desc=f"Inverting {len(embeds)} modalities"
         )
 
         return embeds
