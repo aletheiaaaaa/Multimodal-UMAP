@@ -1,7 +1,7 @@
 import torch
 from torch import linalg as LA
 from torch import sparse as sp
-from torch.autograd.functional import jacobian
+from torch.autograd import functional as AF
 from torch.nn import functional as F
 from tqdm import tqdm
 
@@ -157,7 +157,7 @@ class UMAPEncoder:
         return graph, embed
 
 class UMAPMixture:
-    def __init__(self, k_neighbors: int, out_dim: int, min_dist: float, num_encoders: int = 3):
+    def __init__(self, k_neighbors: int, out_dim: int, min_dist: float, num_encoders: int):
         self.k_neighbors = k_neighbors
         self.out_dim = out_dim
         self.min_dist = min_dist
@@ -419,7 +419,7 @@ class UMAPMixture:
 
         for _ in tqdm(range(num_iters), desc="Estimating a/b coefficients"):
             res = residuals(distances, betas)
-            jac = jacobian(lambda betas: residuals(distances, betas), betas)
+            jac = AF.jacobian(lambda betas: residuals(distances, betas), betas)
 
             betas -= LA.pinv(jac) @ res
 
