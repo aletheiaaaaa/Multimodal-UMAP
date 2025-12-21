@@ -2,7 +2,6 @@ import torch
 from dataclasses import dataclass
 
 from model import UMAPMixture
-from data import load_data, train_test_split
 
 @dataclass
 class Config:

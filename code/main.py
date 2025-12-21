@@ -1,8 +1,9 @@
 import argparse
 
-from util import Config, train
-from crossmodal import save_crossmodal
 from validation import triangle_test, knn_test
+from crossmodal import save_crossmodal
+from arithmetic import save_latent_math
+from util import Config, train
 
 def init_parser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Cross-modal UMAP Mixture Model Experiments")
@@ -22,7 +23,8 @@ def init_parser() -> argparse.Namespace:
 
     parser.add_argument("--test_epochs", type=int, default=20, help="Number of testing epochs")
     parser.add_argument("--k_test", type=int, default=5, help="Number of neighbors for k-NN test")
-    parser.add_argument("--paths", type=str, nargs="+", default=["brain textual", "brain visual", "textual visual"], help="List of source-destination mode pairs for cross-modal reconstruction")
+    parser.add_argument("--paths", type=str, nargs="+", default=[], help="List of source-destination mode pairs for cross-modal reconstruction")
+    parser.add_argument("--classes", type=int, nargs="+", default=[], help="Classes for latent space arithmetic performed using 'idx1-idx2+idx3'")
 
     args = parser.parse_args()
 
@@ -47,5 +49,11 @@ if __name__ == "__main__":
     triangle_test(args.dataset, args.subject, cfg, model=model)
     knn_test(args.dataset, args.subject, cfg, k=args.k_test, model=model)
 
-    paths = [tuple(path.split()) for path in args.paths]
-    save_crossmodal(args.dataset, args.subject, cfg, paths, model=model)
+    if args.paths:
+        path_tuples = [tuple(path.split("_to_")) for path in args.paths]
+        save_crossmodal(args.dataset, args.subject, cfg, path_tuples, model=model)
+
+    if args.classes:
+        if len(args.classes) != 3:
+            raise ValueError("Please provide exactly three class indices for latent space arithmetic.")
+        save_latent_math(args.dataset, args.subject, cfg, tuple(args.classes), modes=["all"], model=model)
