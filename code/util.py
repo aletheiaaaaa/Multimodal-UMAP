@@ -5,17 +5,17 @@ from model import UMAPMixture
 
 @dataclass
 class Config:
-    k_neighbors: int = 15
-    out_dim: int = 128
-    min_dist: float = 0.1
+    k_neighbors: int
+    out_dim: int
+    min_dist: float
 
-    train_epochs: int = 100
-    num_rep: int = 8
-    lr: float = 0.2
-    alpha: float = 0.5
-    batch_size: int = 512
+    train_epochs: int
+    num_rep: int
+    lr: float
+    alpha: float
+    batch_size: int
 
-    test_epochs: int = 20
+    test_epochs: int
 
 def get_index(mode: str) -> int:
     mode_to_index = {
@@ -26,7 +26,7 @@ def get_index(mode: str) -> int:
 
     return mode_to_index[mode]
 
-def train(data: list[torch.Tensor], cfg: Config) -> UMAPMixture:
+def train(data: list[torch.Tensor], cfg: Config, save_dir: str | None = None) -> UMAPMixture:
     model = UMAPMixture(
         k_neighbors=cfg.k_neighbors,
         out_dim=cfg.out_dim,
@@ -40,13 +40,16 @@ def train(data: list[torch.Tensor], cfg: Config) -> UMAPMixture:
         num_rep=cfg.num_rep,
         lr=cfg.lr,
         alpha=cfg.alpha,
-        batch_size=cfg.batch_size
+        batch_size=cfg.batch_size,
+        save_dir=save_dir
     )
 
     return model
 
-def embed(model: UMAPMixture, data: torch.Tensor, src: int, cfg: Config) -> torch.Tensor:
-    embed = model.transform(
+def embed(model: UMAPMixture, data: list[torch.Tensor], src: list[int], cfg: Config) -> list[torch.Tensor]:
+    data = [d.unsqueeze(0) if d.dim() == 1 else d for d in data]
+
+    embeds = model.transform(
         data,
         epochs=cfg.test_epochs,
         data_indices=src,
@@ -56,11 +59,13 @@ def embed(model: UMAPMixture, data: torch.Tensor, src: int, cfg: Config) -> torc
         batch_size=cfg.batch_size
     )
 
-    return embed
+    return embeds
 
-def recon(model: UMAPMixture, embed: torch.Tensor, dst: int, cfg: Config) -> torch.Tensor:
-    recon = model.inverse_transform(
-        embed,
+def recon(model: UMAPMixture, embeds: list[torch.Tensor], dst: list[int], cfg: Config) -> list[torch.Tensor]:
+    embeds = [e.unsqueeze(0) if e.dim() == 1 else e for e in embeds]
+
+    recons = model.inverse_transform(
+        embeds,
         epochs=cfg.test_epochs,
         data_indices=dst,
         num_rep=cfg.num_rep,
@@ -69,8 +74,8 @@ def recon(model: UMAPMixture, embed: torch.Tensor, dst: int, cfg: Config) -> tor
         batch_size=cfg.batch_size
     )
 
-    return recon
+    return recons
 
-def embed_and_recon(model: UMAPMixture, data: torch.Tensor, src: int, dst: int, cfg: Config) -> torch.Tensor:
-    embed = embed(model, data, src, cfg)
-    return recon(model, embed, dst, cfg)
+def embed_and_recon(model: UMAPMixture, data: list[torch.Tensor], src: list[int], dst: list[int], cfg: Config) -> list[torch.Tensor]:
+    embeds = embed(model, data, src, cfg)
+    return recon(model, embeds, dst, cfg)

@@ -2,64 +2,53 @@ import torch
 
 from model import UMAPMixture
 from util import Config, train, embed
-from data import load_data, train_test_split
+from dataset import load_data, train_test_split
 
-def triangle_test(dataset: str, subject: int, cfg: Config, model: UMAPMixture | None = None) -> None:
-    train_split = []
-    test_split = []
+def similarity_test(data: list[torch.Tensor], modes: list[str], cfg: Config, data_dir: str, model: UMAPMixture | None = None, return_values: bool = False) -> float | None:
+    if len(modes) == 3:
+        embeds = embed(model, data, [0, 1, 2], cfg)
+        brain_embeds, text_embeds, image_embeds = embeds[0], embeds[1], embeds[2]
 
-    for mode in ["brain", "textual", "visual"]:
-        data = load_data(dataset, mode, subject)
-        train_data, test_data = train_test_split(data)
+        v1 = brain_embeds - text_embeds
+        v2 = brain_embeds - image_embeds
 
-        train_split.append(train_data)
-        test_split.append(test_data)
+        dists = 0.5 * (torch.norm(v1, dim=1, p=2).pow(2) * torch.norm(v2, dim=1, p=2).pow(2) - torch.dot(v1, v2, dim=1).pow(2)).sqrt()
+    elif len(modes) == 2:
+        embeds = embed(model, data, [0, 1], cfg)
+        embeds_0, embeds_1 = embeds[0], embeds[1]
 
-    if model is None:
-        model = train(train_split, cfg)
+        dists = torch.norm(embeds_0 - embeds_1, dim=1, p=2)
 
-    areas = []
-    for (scan, caption, image) in zip(test_split[0], test_split[1], test_split[2]):
-        brain_embed = embed(model, scan.unsqueeze(0), 0, cfg)
-        text_embed = embed(model, caption.unsqueeze(0), 1, cfg)
-        image_embed = embed(model, image.unsqueeze(0), 2, cfg)
+    else:
+        raise ValueError("At least two modes are required for similarity test.")
 
-        v1 = brain_embed - text_embed
-        v2 = brain_embed - image_embed
+    result = dists.mean().item()
+    print(f"Average cross-modal distance: {result:.4f}")
 
-        area = 0.5 * (torch.norm(v1, p=2).pow(2) * torch.norm(v2, p=2).pow(2) - torch.dot(v1, v2).pow(2)).sqrt()
-        areas.append(area)
+    if return_values:
+        return result
 
-    print(f"Average triangle area for subject {subject} in dataset {dataset}: {torch.stack(areas).mean():.4f}")
-
-def knn_test(dataset: str, subject: int, cfg: Config, k: int = 5, model: UMAPMixture | None = None) -> None:
-    train_split = []
-    test_split = []
-
-    for mode in ["brain", "textual", "visual"]:
-        data = load_data(dataset, mode, subject)
-        train_data, test_data = train_test_split(data)
-
-        train_split.append(train_data)
-        test_split.append(test_data)
-
-    if model is None:
-        model = train(train_split, cfg)
-
+def knn_test(data: list[torch.Tensor], subject: int, modes: list[str], cfg: Config, data_dir: str, k: int = 5, model: UMAPMixture | None = None, return_values: bool = False) -> float | None:
     accs = []
-    for (src, dst) in [(i, j) for i in range(3) for j in range(3) if i != j]:
-        src_embed = embed(model, test_split[src], src, cfg)
-        dst_embed = embed(model, test_split[dst], dst, cfg)
+    for (src, dst) in [(i, j) for i in range(len(modes)) for j in range(i+1, len(modes))]:
+        embeds = embed(model, [data[src], data[dst]], [src, dst], cfg)
+        src_embed, dst_embed = embeds[0], embeds[1]
 
-        correct = 0
-        for i in range(src_embed.shape[0]):
-            distances = torch.norm(dst_embed - src_embed[i].unsqueeze(0), dim=1)
-            knn_indices = torch.topk(distances, k, largest=False).indices
+        sample_indices = torch.arange(src_embed.shape[0]).unsqueeze(1)
 
-            if i in knn_indices:
-                correct += 1
+        distances = torch.cdist(src_embed, dst_embed, p=2)
+        knn_indices_fwd = torch.topk(distances, k, dim=1, largest=False).indices
+        knn_indices_bwd = torch.topk(distances.T, k, dim=1, largest=False).indices
 
-        acc = correct / src_embed.shape[0]
+        # Convert to int so that 1+1=2 works properly
+        matches = (knn_indices_fwd == sample_indices).any(dim=1).int() + (knn_indices_bwd == sample_indices).any(dim=1).int()
+        correct = matches.sum().item()
+
+        acc = correct / (2 * src_embed.shape[0])
         accs.append(acc)
 
-    print(f"Average KNN accuracy for subject {subject} in dataset {dataset}: {torch.tensor(accs).mean():.4f}")
+    result = torch.tensor(accs).mean().item()
+    print(f"Average KNN accuracy: {result:.4f}")
+
+    if return_values:
+        return result
