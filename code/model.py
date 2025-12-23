@@ -270,12 +270,12 @@ class UMAPMixture:
         loss = -torch.log(1 - weight + 1e-6).mean()
         return loss
 
-    def _infonce_loss(self, embeds_0: torch.Tensor, embeds_1: torch.Tensor, active: torch.Tensor, n_neg: int = 32, temperature: float = 0.5) -> torch.Tensor:
+    def _infonce_loss(self, embeds_0: torch.Tensor, embeds_1: torch.Tensor, active: torch.Tensor, n_neg: int = 8, temperature: float = 0.5) -> torch.Tensor:
         i_idx, j_idx = active.indices()[0], active.indices()[1]
         num_pairs = i_idx.size(0)
         num_samples = embeds_1.size(0)
 
-        infonce_batch_size = 10000
+        infonce_batch_size = 1000
         losses = []
 
         # Batch computation to avoid OOM
