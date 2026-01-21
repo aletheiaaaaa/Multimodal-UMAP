@@ -4,6 +4,7 @@ from torch import sparse as sp
 from torch.autograd import functional as AF
 from torch.nn import functional as F
 from tqdm import tqdm
+import numpy as np
 
 class UMAPEncoder:
     def __init__(self, k_neighbors: int, out_dim: int, id: int = 0):
@@ -37,7 +38,7 @@ class UMAPEncoder:
             raise ValueError(f"Invalid mode: {mode}")
 
         N = inputs.size(0)
-        Q = query.size(0) if ref_data is not None else N
+        Q = query.size(0) if query is not None else N
 
         rows = torch.arange(Q).repeat_interleave(self.k_neighbors)
         cols = torch.randint(0, N, (Q * self.k_neighbors,))
@@ -251,8 +252,9 @@ class UMAPMixture:
         embeds_i = embeds[i_idx]
         embeds_j = ref[j_idx]
 
-        dist = ((embeds_i - embeds_j).pow(2)).sum(dim=1).clamp(min=1e-6)
-        weight = 1.0 / (1.0 + a * dist.pow(b))
+        sq_dist = ((embeds_i - embeds_j).pow(2)).sum(dim=1).clamp(min=1e-6)
+        dist = sq_dist.sqrt()
+        weight = 1.0 / (1.0 + a * sq_dist.pow(b))
 
         loss = (dist / (weight * sigma[j_idx] + 1e-6)).mean()
         return loss
@@ -264,7 +266,8 @@ class UMAPMixture:
         embeds_i = embeds[i_idx]
         embeds_j = ref[j_idx]
 
-        dist = ((embeds_i - embeds_j).pow(2)).sum(dim=1).clamp(min=1e-6)
+        sq_dist = ((embeds_i - embeds_j).pow(2)).sum(dim=1).clamp(min=1e-6)
+        dist = sq_dist.sqrt()
         weight = (- (dist - rho[j_idx]).clamp(min=1e-6) / (sigma[j_idx] + 1e-6)).exp()
 
         loss = -torch.log(1 - weight + 1e-6).mean()
@@ -316,11 +319,7 @@ class UMAPMixture:
             for ref in self.embeds:
                 ref.requires_grad = False
 
-        # Adam parameters
-        m = [torch.zeros_like(embed) for embed in embeds]
-        v = [torch.zeros_like(embed) for embed in embeds]
-        beta1, beta2 = 0.9, 0.999
-        eps = 1e-6
+        optimizer = torch.optim.Adam(embeds, lr=lr)
 
         loss_history = {
             'total_loss': [],
@@ -404,26 +403,10 @@ class UMAPMixture:
                         loss_history['infonce_losses'][i].append(infonce_loss.item())
 
             loss.backward()
-
-            # Adam optimization
-            for i in range(len(embeds)):
-                grad = embeds[i].grad
-
-                m[i] = beta1 * m[i] + (1 - beta1) * grad
-                v[i] = beta2 * v[i] + (1 - beta2) * grad.pow(2)
-
-                m_hat = m[i] / (1 - beta1 ** (epoch + 1))
-                v_hat = v[i] / (1 - beta2 ** (epoch + 1))
-
-                embeds[i].data -= lr * m_hat / (v_hat.sqrt() + eps)
-                embeds[i].grad.zero_()
+            optimizer.step()
+            optimizer.zero_grad()
 
         if save_dir is not None:
-            import numpy as np
-            from pathlib import Path
-
-            Path(save_dir).parent.mkdir(parents=True, exist_ok=True)
-
             save_dict = {
                 'total_loss': np.array(loss_history['total_loss']),
                 'epochs': np.arange(len(loss_history['total_loss']))

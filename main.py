@@ -12,17 +12,17 @@ def init_parser() -> argparse.Namespace:
     parser.add_argument("--out_dim", type=int, default=64, help="Output embedding dimension")
     parser.add_argument("--min_dist", type=float, default=0.1, help="Minimum distance for UMAP")
 
-    parser.add_argument("--train_epochs", type=int, default=200, help="Number of training epochs")
+    parser.add_argument("--train_epochs", type=int, default=500, help="Number of training epochs")
     parser.add_argument("--num_rep", type=int, default=8, help="Number of repulsive points for UMAP")
-    parser.add_argument("--lr", type=float, default=0.2, help="Learning rate")
-    parser.add_argument("--alpha", type=float, default=1.0, help="Cross-modal alignment weight")
+    parser.add_argument("--lr", type=float, default=0.005, help="Learning rate")
+    parser.add_argument("--alpha", type=float, default=2.0, help="Cross-modal alignment weight")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
-    parser.add_argument("--num_samples", type=int, default=10000, help="Number of samples to use for training")
     parser.add_argument("--save_dir", type=str, default=None, help="Directory to log training losses")
 
-    parser.add_argument("--data_dir", type=str, default="~/Desktop/uni/ml_coursework/data", help="Path to data directory")
-    parser.add_argument("--subject", type=int, default=1, help="Subject number")
-    parser.add_argument("--modes", type=str, nargs="+", default=["brain", "visual"], choices=["brain", "textual", "visual"], help="Data modalities to use")
+    parser.add_argument("--dataset", type=str, default="nlphuji/flickr30k", help="Dataset name")
+    parser.add_argument("--text_encoder", type=str, default="google-bert/bert-base-uncased", help="Text encoder model name")
+    parser.add_argument("--vision_encoder", type=str, default="google/vit-base-patch16-224", help="Vision encoder model name")
+    parser.add_argument("--splits", type=str, nargs="+", default=["train"], help="List of dataset splits/modes to use")
 
     parser.add_argument("--test_epochs", type=int, default=50, help="Number of testing epochs")
     parser.add_argument("--k_test", type=int, default=10, help="Number of neighbors for k-NN test")
@@ -48,21 +48,25 @@ if __name__ == "__main__":
 
     train_split = []
     test_split = []
-    for mode in args.modes:
-        data = load_data(mode, args.subject, args.data_dir)
+
+    for splits in args.splits:
+        data = load_data(
+            dataset=args.dataset,
+            text_encoder=args.text_encoder,
+            vision_encoder=args.vision_encoder,
+            split=splits
+        )
+
         train_data, test_data = train_test_split(data)
 
         train_split.append(train_data)
         test_split.append(test_data)
 
-    train_split = [d[:args.num_samples] for d in train_split]
-    test_split = [d[:int(args.num_samples * 0.25)] for d in test_split]
-
-    model = train(train_split, cfg)
+    model = train(train_split, cfg, args.save_dir)
 
     # Validation
-    similarity_test(test_split, args.modes, cfg, data_dir=args.data_dir, model=model)
-    knn_test(test_split, args.subject, args.modes, cfg, data_dir=args.data_dir, k=args.k_test, model=model)
+    similarity_test(test_split, args.modes, cfg, model=model)
+    knn_test(test_split, args.modes, cfg, k=args.k_test, model=model)
 
     # Experiments
     if args.paths:
