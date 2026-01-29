@@ -34,9 +34,6 @@ class UMAPEncoder:
         return self.sigmas
 
     def fuzzy_knn_graph(self, inputs: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref_data: torch.Tensor | None = None, num_iters: int = 10, a: float | None = None, b: float | None = None) -> torch.Tensor:
-        if mode not in ["fit", "transform", "invert"]:
-            raise ValueError(f"Invalid mode: {mode}")
-
         N = inputs.size(0)
         Q = query.size(0) if query is not None else N
 
@@ -183,18 +180,15 @@ class UMAPEncoder:
         return vectors[:, 1:]
     
     @torch.no_grad()
-    def embed_query(self, input: torch.Tensor, graph: torch.Tensor) -> torch.Tensor:
-        row_sums = graph.sum(dim=1).to_dense().clamp(min=1e-6)
-        indices = graph.indices()
-        values = graph.values() / row_sums[indices[0]]
-        normalized = torch.sparse_coo_tensor(indices, values, graph.shape)
+    def embed_query(self, ref: torch.Tensor, query: torch.Tensor) -> torch.Tensor:
+        row_sums = query.sum(dim=1).to_dense().clamp(min=1e-6)
+        indices = query.indices()
+        values = query.values() / row_sums[indices[0]]
+        normalized = torch.sparse_coo_tensor(indices, values, query.shape).coalesce()
 
-        return sp.mm(normalized, input)
+        return sp.mm(normalized, ref)
 
     def init(self, input: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref_data: torch.Tensor | None = None, ref_embeds: torch.Tensor | None = None, a: float | None = None, b: float | None = None) -> tuple[torch.Tensor, torch.Tensor]:
-        if mode not in ["fit", "transform", "invert"]:
-            raise ValueError(f"Invalid mode: {mode}")
-
         graph = self.fuzzy_knn_graph(input, mode, query, ref_data, num_iters=10, a=a, b=b)
         if mode == "fit":
             graph = (graph + graph.transpose(0, 1) - graph * graph.transpose(0, 1)).coalesce()
@@ -273,47 +267,40 @@ class UMAPMixture:
         loss = -torch.log(1 - weight + 1e-6).mean()
         return loss
 
-    def _infonce_loss(self, embeds_0: torch.Tensor, embeds_1: torch.Tensor, active: torch.Tensor, n_neg: int = 8, temperature: float = 0.5) -> torch.Tensor:
-        i_idx, j_idx = active.indices()[0], active.indices()[1]
-        num_pairs = i_idx.size(0)
-        num_samples = embeds_1.size(0)
+    def _infonce_loss(self, embeds_0: torch.Tensor, embeds_1: torch.Tensor, n_neg: int = 8, temperature: float = 0.5) -> torch.Tensor:
+        num_samples = min(embeds_0.size(0), embeds_1.size(0))
+        if num_samples == 0:
+            return torch.tensor(0.0, requires_grad=True)
 
-        infonce_batch_size = 1000
+        batch_size = 1000
         losses = []
 
         # Batch computation to avoid OOM
-        for start in range(0, num_pairs, infonce_batch_size):
-            end = min(start + infonce_batch_size, num_pairs)
+        indices = torch.randperm(num_samples)
+        for start in range(0, num_samples, batch_size):
+            end = min(start + batch_size, num_samples)
+            batch_indices = indices[start:end]
 
-            batch_i_idx = i_idx[start:end]
-            batch_j_idx = j_idx[start:end]
-
-            anchors = embeds_0[batch_i_idx]
-            positives = embeds_1[batch_j_idx]
-
-            # Compute L2 norm between normalized anchors and samples
-            anchors_norm = F.normalize(anchors, dim=1)
-            positives_norm = F.normalize(positives, dim=1)
+            anchors_norm = F.normalize(embeds_0[batch_indices], dim=1)
+            positives_norm = F.normalize(embeds_1[batch_indices], dim=1)
             pos_sim = (anchors_norm * positives_norm).sum(dim=1) / temperature
 
-            batch_size = batch_i_idx.size(0)
-            neg_idx = torch.randint(0, num_samples, (batch_size, n_neg))
+            true_batch_size = batch_indices.size(0)
+            neg_idx = torch.randint(0, num_samples, (true_batch_size, n_neg + 1))
             negatives = embeds_1[neg_idx]
-            negatives_norm = F.normalize(negatives, dim=2)
-            neg_sim = (anchors_norm.unsqueeze(1) * negatives_norm).sum(dim=2) / temperature
 
-            # Compute log softmax directly over all samples at once, and then extract value for only the positive sample
+            mask = neg_idx != batch_indices.unsqueeze(1)
+            negatives = negatives * mask.unsqueeze(2)
+            negatives_norm = F.normalize(negatives, dim=2)
+            neg_sim = ((anchors_norm.unsqueeze(1) * negatives_norm).sum(dim=2) / temperature).masked_fill(~mask, float('-inf'))
+
             batch_loss = -torch.log_softmax(torch.cat([pos_sim.unsqueeze(1), neg_sim], dim=1), dim=1)[:, 0]
             losses.append(batch_loss.mean())
 
         return torch.stack(losses).mean()
 
     def _train(self, embeds: list[torch.Tensor], graphs: list[torch.Tensor], epochs: int, num_rep: int, lr: float, alpha: float, batch_size: int, mode: str = "fit", data_indices: list | None = None, desc: str = "Training", save_dir: str | None = None):
-        if mode not in ["fit", "transform", "invert"]:
-            raise ValueError(f"Invalid mode: {mode}")
-
-        for rep in embeds:
-            rep.requires_grad = True
+        embeds = [e.clone().detach().requires_grad_(True) for e in embeds]
 
         if mode == "transform":
             for ref in self.embeds:
@@ -341,7 +328,7 @@ class UMAPMixture:
                 elif mode == "invert":
                     ref_embed = self.data[data_indices[i]] if data_indices is not None else self.data[i]
 
-                count = embed.size(0) if mode == "fit" else ref_embed.size(0)
+                count = embed.size(0) if mode == "fit" else max(embed.size(0), ref_embed.size(0))
                 batch_losses = []
 
                 for j in range(0, count, batch_size):
@@ -379,15 +366,15 @@ class UMAPMixture:
             loss = sum(umap_losses)
 
             # Compute InfoNCE losses between modalities for cross-modal alignment
-            if mode == "fit":
+            if mode != "invert":
                 num_embeds = len(embeds)
                 infonce_losses = [torch.tensor(0.0, requires_grad=True) for _ in range(num_embeds)]
 
                 for i in range(num_embeds):
                     for j in range(i + 1, num_embeds):
-                        active = graphs[i]
-
-                        infonce_loss = self._infonce_loss(embeds[i], embeds[j], active)
+                        infonce_ij = self._infonce_loss(embeds[i], embeds[j])
+                        infonce_ji = self._infonce_loss(embeds[j], embeds[i])
+                        infonce_loss = (infonce_ij + infonce_ji) / 2.0
 
                         infonce_losses[i] = infonce_losses[i] + alpha * infonce_loss
                         infonce_losses[j] = infonce_losses[j] + alpha * infonce_loss
@@ -421,12 +408,14 @@ class UMAPMixture:
 
             np.savez(save_dir, **save_dict)
 
+        return embeds
+
     def fit(self, inputs: list[torch.Tensor], epochs: int, num_rep: int = 8, lr: float = 0.2, alpha: float = 0.5, batch_size: int = 512, save_dir: str | None = None) -> torch.Tensor | None:
         graphs, embeds = self.init(inputs, mode="fit")
         self.graphs = graphs
         self.data = inputs
 
-        self._train(
+        self.embeds = self._train(
             embeds,
             graphs,
             epochs,
@@ -439,8 +428,6 @@ class UMAPMixture:
             save_dir=save_dir
         )
 
-        self.embeds = embeds
-
     def fit_transform(self, inputs: list[torch.Tensor], epochs: int, num_rep: int = 8, lr: float = 0.2, alpha: float = 0.5, batch_size: int = 512) -> torch.Tensor:
         self.fit(inputs, epochs, num_rep, lr, alpha, batch_size)
         return self.embeds
@@ -448,7 +435,7 @@ class UMAPMixture:
     def transform(self, inputs: list[torch.Tensor], epochs: int, data_indices: list | None = None, num_rep: int = 8, lr: float = 0.2, alpha: float = 0.5, batch_size: int = 512) -> torch.Tensor:
         graphs, embeds = self.init(inputs, mode="transform", data_indices=data_indices)
 
-        self._train(
+        return self._train(
             embeds,
             graphs,
             epochs,
@@ -460,13 +447,11 @@ class UMAPMixture:
             data_indices=data_indices,
             desc=f"Embedding {len(embeds)} modalities"
         )
-
-        return embeds
     
     def inverse_transform(self, inputs: list[torch.Tensor], epochs: int, data_indices: list | None = None, num_rep: int = 8, lr: float = 0.2, alpha: float = 0.5, batch_size: int = 512) -> torch.Tensor:
         graphs, embeds = self.init(inputs, mode="invert", data_indices=data_indices)
 
-        self._train(
+        return self._train(
             embeds,
             graphs,
             epochs,
@@ -478,8 +463,6 @@ class UMAPMixture:
             data_indices=data_indices,
             desc=f"Inverting {len(embeds)} modalities"
         )
-
-        return embeds
 
     def get_ab_coeffs(self, min_dist: float, num_iters: int = 50) -> tuple[float, float]:
         def target(dist: torch.Tensor) -> torch.Tensor:

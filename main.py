@@ -1,4 +1,5 @@
 import argparse
+import torch
 
 from validation import similarity_test, knn_test
 from crossmodal import save_crossmodal
@@ -9,13 +10,13 @@ def init_parser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Cross-modal UMAP Mixture Model Experiments")
 
     parser.add_argument("--k_neighbors", type=int, default=15, help="Number of neighbors for UMAP")
-    parser.add_argument("--out_dim", type=int, default=64, help="Output embedding dimension")
+    parser.add_argument("--out_dim", type=int, default=16, help="Output embedding dimension")
     parser.add_argument("--min_dist", type=float, default=0.1, help="Minimum distance for UMAP")
 
-    parser.add_argument("--train_epochs", type=int, default=500, help="Number of training epochs")
+    parser.add_argument("--train_epochs", type=int, default=1000, help="Number of training epochs")
     parser.add_argument("--num_rep", type=int, default=8, help="Number of repulsive points for UMAP")
-    parser.add_argument("--lr", type=float, default=0.005, help="Learning rate")
-    parser.add_argument("--alpha", type=float, default=2.0, help="Cross-modal alignment weight")
+    parser.add_argument("--lr", type=float, default=0.01, help="Learning rate")
+    parser.add_argument("--alpha", type=float, default=1.0, help="Cross-modal alignment weight")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
     parser.add_argument("--save_dir", type=str, default=None, help="Directory to log training losses")
 
@@ -24,8 +25,8 @@ def init_parser() -> argparse.Namespace:
     parser.add_argument("--vision_encoder", type=str, default="google/vit-base-patch16-224", help="Vision encoder model name")
     parser.add_argument("--splits", type=str, nargs="+", default=["train"], help="List of dataset splits/modes to use")
 
-    parser.add_argument("--test_epochs", type=int, default=50, help="Number of testing epochs")
-    parser.add_argument("--k_test", type=int, default=10, help="Number of neighbors for k-NN test")
+    parser.add_argument("--test_epochs", type=int, default=100, help="Number of testing epochs")
+    parser.add_argument("--k_test", type=int, default=1, help="Number of neighbors for k-NN test")
     parser.add_argument("--paths", type=str, nargs="+", default=[], help="List of source-destination mode pairs for cross-modal reconstruction")
 
     args = parser.parse_args()
@@ -49,24 +50,39 @@ if __name__ == "__main__":
     train_split = []
     test_split = []
 
-    for splits in args.splits:
-        data = load_data(
-            dataset=args.dataset,
-            text_encoder=args.text_encoder,
-            vision_encoder=args.vision_encoder,
-            split=splits
-        )
+    # for splits in args.splits:
+    #     data = load_data(
+    #         dataset=args.dataset,
+    #         text_encoder=args.text_encoder,
+    #         vision_encoder=args.vision_encoder,
+    #         split=splits
+    #     )
 
-        train_data, test_data = train_test_split(data)
+    #     train_data, test_data = train_test_split(data)
 
-        train_split.append(train_data)
-        test_split.append(test_data)
+    #     train_split.append(train_data)
+    #     test_split.append(test_data)
+
+    # Create shared latent structure across modalities
+    n_samples = 500
+    latent_dim = 64
+    shared_latent = torch.randn(n_samples, latent_dim)
+
+    # Project to each modality with different random projections
+    projections = [torch.randn(latent_dim, 512) for _ in range(3)]
+    clusters = torch.stack([
+        shared_latent @ proj + torch.randn(n_samples, 512) * 0.1
+        for proj in projections
+    ])
+
+    indices = torch.randperm(n_samples)
+    train_split, test_split = clusters[:, indices[:400]], clusters[:, indices[400:]]
 
     model = train(train_split, cfg, args.save_dir)
 
     # Validation
-    similarity_test(test_split, args.modes, cfg, model=model)
-    knn_test(test_split, args.modes, cfg, k=args.k_test, model=model)
+    similarity_test(test_split, cfg, model=model)
+    knn_test(test_split, cfg, k=args.k_test, model=model)
 
     # Experiments
     if args.paths:

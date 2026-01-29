@@ -34,3 +34,23 @@ def load_data(dataset: str, text_encoder: str, vision_encoder: str, split: str =
     processed_data["images"] = torch.stack(processed_data["images"])
 
     return processed_data
+
+def train_test_split(data: dict, test_ratio: float = 0.2):
+    num_samples = data["texts"].size(0)
+    indices = torch.randperm(num_samples)
+    test_size = int(num_samples * test_ratio)
+
+    test_indices = indices[:test_size]
+    train_indices = indices[test_size:]
+
+    train_data = {
+        "texts": data["texts"][train_indices],
+        "images": data["images"][train_indices]
+    }
+
+    test_data = {
+        "texts": data["texts"][test_indices],
+        "images": data["images"][test_indices]
+    }
+
+    return train_data, test_data

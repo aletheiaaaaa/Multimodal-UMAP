@@ -5,8 +5,8 @@ from model import UMAPMixture
 from util import Config, train, embed
 from dataset import load_data, train_test_split
 
-def similarity_test(data: list[torch.Tensor], modes: list[str], cfg: Config, model: UMAPMixture | None = None, return_values: bool = False) -> float | None:
-    num_modes = len(modes)
+def similarity_test(data: list[torch.Tensor], cfg: Config, model: UMAPMixture | None = None, return_values: bool = False) -> float | None:
+    num_modes = len(data)
     if num_modes < 2:
         raise ValueError("At least two modes are required for similarity test.")
 
@@ -25,9 +25,9 @@ def similarity_test(data: list[torch.Tensor], modes: list[str], cfg: Config, mod
     if return_values:
         return result
 
-def knn_test(data: list[torch.Tensor], modes: list[str], cfg: Config, k: int = 5, model: UMAPMixture | None = None, return_values: bool = False) -> float | None:
+def knn_test(data: list[torch.Tensor], cfg: Config, k: int = 5, model: UMAPMixture | None = None, return_values: bool = False) -> float | None:
     accs = []
-    for (src, dst) in [(i, j) for i in range(len(modes)) for j in range(i+1, len(modes))]:
+    for (src, dst) in [(i, j) for i in range(len(data)) for j in range(i+1, len(data))]:
         embeds = embed(model, [data[src], data[dst]], [src, dst], cfg)
         src_embed, dst_embed = embeds[0], embeds[1]
 

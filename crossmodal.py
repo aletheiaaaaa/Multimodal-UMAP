@@ -34,5 +34,5 @@ def save_crossmodal(data: list[torch.Tensor], subject: int, cfg: Config, paths: 
             axes[1, i].set_title(f"Reconstructed {dst} from {src} sample {i+1}")
 
         plt.tight_layout()
-        plt.savefig(f"results/sub-{subject}_{src}_to_{dst}.png")
+        plt.savefig(f"results/recon_{src}_to_{dst}.png")
         plt.close()
