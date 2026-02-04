@@ -1,10 +1,9 @@
 import argparse
-import torch
 
-from validation import similarity_test, knn_test
-from crossmodal import save_crossmodal
-from util import Config, train
-from dataset import load_data, train_test_split
+from impl.validation import similarity_test, knn_test
+# from crossmodal import save_crossmodal
+from impl.util import Config, train
+from impl.dataset import load_data
 
 def init_parser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Cross-modal UMAP Mixture Model Experiments")
@@ -20,10 +19,7 @@ def init_parser() -> argparse.Namespace:
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
     parser.add_argument("--save_dir", type=str, default=None, help="Directory to log training losses")
 
-    parser.add_argument("--dataset", type=str, default="nlphuji/flickr30k", help="Dataset name")
-    parser.add_argument("--text_encoder", type=str, default="google-bert/bert-base-uncased", help="Text encoder model name")
-    parser.add_argument("--vision_encoder", type=str, default="google/vit-base-patch16-224", help="Vision encoder model name")
-    parser.add_argument("--splits", type=str, nargs="+", default=["train"], help="List of dataset splits/modes to use")
+    # parser.add_argument("--data_dir", type=str, default="./data", help="Directory to save cross-modal reconstructions")
 
     parser.add_argument("--test_epochs", type=int, default=100, help="Number of testing epochs")
     parser.add_argument("--k_test", type=int, default=1, help="Number of neighbors for k-NN test")
@@ -47,44 +43,14 @@ if __name__ == "__main__":
         test_epochs=args.test_epochs
     )
 
-    train_split = []
-    test_split = []
-
-    # for splits in args.splits:
-    #     data = load_data(
-    #         dataset=args.dataset,
-    #         text_encoder=args.text_encoder,
-    #         vision_encoder=args.vision_encoder,
-    #         split=splits
-    #     )
-
-    #     train_data, test_data = train_test_split(data)
-
-    #     train_split.append(train_data)
-    #     test_split.append(test_data)
-
-    # Create shared latent structure across modalities
-    n_samples = 500
-    latent_dim = 64
-    shared_latent = torch.randn(n_samples, latent_dim)
-
-    # Project to each modality with different random projections
-    projections = [torch.randn(latent_dim, 512) for _ in range(3)]
-    clusters = torch.stack([
-        shared_latent @ proj + torch.randn(n_samples, 512) * 0.1
-        for proj in projections
-    ])
-
-    indices = torch.randperm(n_samples)
-    train_split, test_split = clusters[:, indices[:400]], clusters[:, indices[400:]]
+    train_split = load_data(split="train")
+    test_split = load_data(split="validation")
 
     model = train(train_split, cfg, args.save_dir)
 
-    # Validation
     similarity_test(test_split, cfg, model=model)
     knn_test(test_split, cfg, k=args.k_test, model=model)
 
-    # Experiments
-    if args.paths:
-        path_tuples = [tuple(path.split("_to_")) for path in args.paths]
-        save_crossmodal(test_split, args.subject, cfg, path_tuples, model=model, data_dir=args.data_dir)
+    # if args.paths:
+    #     path_tuples = [tuple(path.split("_to_")) for path in args.paths]
+    #     save_crossmodal(test_split, args.subject, cfg, path_tuples, model=model, data_dir=args.data_dir)

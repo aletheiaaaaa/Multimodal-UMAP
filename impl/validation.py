@@ -2,8 +2,7 @@ import torch
 from torch.nn import functional as F
 
 from model import UMAPMixture
-from util import Config, train, embed
-from dataset import load_data, train_test_split
+from util import Config, embed
 
 def similarity_test(data: list[torch.Tensor], cfg: Config, model: UMAPMixture | None = None, return_values: bool = False) -> float | None:
     num_modes = len(data)

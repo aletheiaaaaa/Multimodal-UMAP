@@ -2,11 +2,11 @@ import torch
 from matplotlib import pyplot as plt
 
 from model import UMAPMixture
-from util import Config, train, embed_and_recon, get_index
-from dataset import load_data, train_test_split
+from util import Config, embed_and_recon, get_index
 
-def do_crossmodal(data: list[torch.Tensor], cfg: Config, paths: list[tuple[str, str]], model: UMAPMixture | None = None) -> list[torch.Tensor]:
+def crossmodal_recon(data: list[torch.Tensor], cfg: Config, paths: list[tuple[str, str]], model: UMAPMixture | None = None) -> list[torch.Tensor]:
     recons = []
+    losses = []
     for (src, dst) in paths:
         src_idx = get_index(src)
         dst_idx = get_index(dst)
@@ -14,15 +14,9 @@ def do_crossmodal(data: list[torch.Tensor], cfg: Config, paths: list[tuple[str, 
         recon = embed_and_recon(model, [data[src_idx]], [src_idx], [dst_idx], cfg)[0]
         recons.append(recon)
 
-    losses = [torch.mean((recon - data[get_index(dst)]).pow(2)).item() for recon, (_, dst) in zip(recons, paths)]
-
-    for (path, loss) in zip(paths, losses):
-        print(f"Reconstruction loss from {path[0]} to {path[1]}: {loss:.4f}")
-
-    return recons
-
-def save_crossmodal(data: list[torch.Tensor], subject: int, cfg: Config, paths: list[tuple[str, str]], data_dir: str, model: UMAPMixture | None = None) -> None:
-    recons = do_crossmodal(data, cfg, paths, model=model)
+        loss = torch.mean((recon - data[dst_idx]).pow(2)).item()
+        losses.append(loss)
+        print(f"Reconstruction loss from {src} to {dst}: {loss:.4f}")
 
     for (recon, (src, dst)) in zip(recons, paths):
         num_display = 4
@@ -36,3 +30,5 @@ def save_crossmodal(data: list[torch.Tensor], subject: int, cfg: Config, paths: 
         plt.tight_layout()
         plt.savefig(f"results/recon_{src}_to_{dst}.png")
         plt.close()
+
+    return recons
