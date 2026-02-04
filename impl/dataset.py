@@ -11,10 +11,12 @@ def load_data(split: str) -> dict:
         return torch.load(f"data/{split}_data.pt")
 
     data = load_dataset("AnyModal/flickr30k", split=split, streaming=True)
-    batches = data.batch(batch_size=64)
+    batches = data.batch(batch_size=128 if torch.cuda.is_available() else 8)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     text_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
-    text_model = AutoModel.from_pretrained("google-bert/bert-base-uncased")
+    text_model = AutoModel.from_pretrained("google-bert/bert-base-uncased").to(device)
 
     image_transform = transforms.Compose([
         transforms.Resize((512, 512)),
@@ -22,7 +24,7 @@ def load_data(split: str) -> dict:
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])
-    image_model = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse")
+    image_model = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse").to(device)
 
     texts = []
     images = []
