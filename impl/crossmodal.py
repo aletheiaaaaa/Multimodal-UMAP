@@ -1,8 +1,8 @@
 import torch 
 from matplotlib import pyplot as plt
 
-from model import UMAPMixture
-from util import Config, embed_and_recon, get_index
+from .model import UMAPMixture
+from .util import Config, embed_and_recon, get_index
 
 def crossmodal_recon(data: list[torch.Tensor], cfg: Config, paths: list[tuple[str, str]], model: UMAPMixture | None = None) -> list[torch.Tensor]:
     recons = []

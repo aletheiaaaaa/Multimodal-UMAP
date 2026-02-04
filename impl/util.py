@@ -1,7 +1,7 @@
 import torch
 from dataclasses import dataclass
 
-from model import UMAPMixture
+from .model import UMAPMixture
 
 @dataclass
 class Config:
