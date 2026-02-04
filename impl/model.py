@@ -54,7 +54,7 @@ class UMAPEncoder:
 
         # Batch distance computation to save memory
         num_edges = rows.size(0)
-        edge_batch_size = 50000
+        edge_batch_size = 2000 if N > 15000 else 20000
         dists_list = []
 
         for i in range(0, num_edges, edge_batch_size):

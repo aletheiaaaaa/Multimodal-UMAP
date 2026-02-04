@@ -17,16 +17,9 @@ class Config:
 
     test_epochs: int
 
-def get_index(mode: str) -> int:
-    mode_to_index = {
-        "brain": 0,
-        "textual": 1,
-        "visual": 2
-    }
+def train(data: dict, cfg: Config, save_dir: str | None = None) -> UMAPMixture:
+    data = [data[key] for key in data]
 
-    return mode_to_index[mode]
-
-def train(data: list[torch.Tensor], cfg: Config, save_dir: str | None = None) -> UMAPMixture:
     model = UMAPMixture(
         k_neighbors=cfg.k_neighbors,
         out_dim=cfg.out_dim,
