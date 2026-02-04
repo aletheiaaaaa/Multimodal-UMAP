@@ -33,12 +33,12 @@ def load_data(split: str) -> dict:
         text = [t[0] for t in batch["alt_text"]]
         image_list = batch["image"]
 
-        encoded_input = text_tokenizer(text, return_tensors="pt", padding=True, truncation=True)
+        encoded_input = text_tokenizer(text, return_tensors="pt", padding=True, truncation=True).to(device)
         with torch.no_grad():
             text_features = text_model(**encoded_input).pooler_output
         texts.append(text_features)
 
-        processed_images = torch.stack([image_transform(img) for img in image_list])
+        processed_images = torch.stack([image_transform(img) for img in image_list]).to(device)
         with torch.no_grad():
             image_features = image_model.encode(processed_images).latent_dist.mean
         images.append(image_features)
