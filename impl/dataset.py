@@ -11,7 +11,7 @@ def load_data(split: str) -> dict:
         return torch.load(f"data/{split}_data.pt")
 
     data = load_dataset("AnyModal/flickr30k", split=split, streaming=True)
-    batches = data.batch(batch_size=128 if torch.cuda.is_available() else 8)
+    batches = data.batch(batch_size=64 if torch.cuda.is_available() else 8)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
