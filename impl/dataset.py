@@ -11,7 +11,7 @@ def load_data(split: str) -> dict:
         return torch.load(f"data/{split}_data.pt")
 
     data = load_dataset("AnyModal/flickr30k", split=split, streaming=True)
-    batches = data.batch(batch_size=64 if torch.cuda.is_available() else 8)
+    batches = data.batch(batch_size=128 if torch.cuda.is_available() else 8)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -19,8 +19,8 @@ def load_data(split: str) -> dict:
     text_model = AutoModel.from_pretrained("google-bert/bert-base-uncased").to(device)
 
     image_transform = transforms.Compose([
-        transforms.Resize((512, 512)),
-        transforms.CenterCrop(512),
+        transforms.Resize((256, 256)),
+        transforms.CenterCrop(256),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])
