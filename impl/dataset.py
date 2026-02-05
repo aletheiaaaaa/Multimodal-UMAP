@@ -7,6 +7,18 @@ from diffusers import AutoencoderKL
 from tqdm import tqdm
 
 def load_data(split: str) -> dict:
+    """Load and preprocess Flickr30k dataset with cached feature extraction.
+
+    Extracts text features using BERT (pooler output) and image features using
+    Stable Diffusion VAE latents. Results are cached to data/{split}_data.pt.
+
+    Args:
+        split: Dataset split to load (e.g., "train", "test").
+
+    Returns:
+        Dictionary with keys "texts" and "images", each containing a tensor
+        of shape (N, D) where N is the number of samples.
+    """
     device_str = "cuda" if torch.cuda.is_available() else "cpu"
 
     if os.path.exists(f"data/{split}_data.pt"):

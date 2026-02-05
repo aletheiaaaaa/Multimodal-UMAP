@@ -5,6 +5,20 @@ from .model import UMAPMixture, device
 from .util import Config, embed
 
 def similarity_test(data: list[torch.Tensor], cfg: Config, model: UMAPMixture | None = None, return_values: bool = False) -> float | None:
+    """Compute average cosine similarity between cross-modal embeddings.
+
+    Measures alignment quality by computing pairwise cosine similarities between
+    embeddings of corresponding samples across all modality pairs.
+
+    Args:
+        data: Dictionary mapping modality names to tensors.
+        cfg: Configuration object with inference hyperparameters.
+        model: Trained UMAPMixture model.
+        return_values: If True, return the similarity score.
+
+    Returns:
+        Average cosine similarity if return_values is True, else None.
+    """
     data = [data[key] for key in data]
     num_modes = len(data)
 
@@ -24,6 +38,22 @@ def similarity_test(data: list[torch.Tensor], cfg: Config, model: UMAPMixture | 
         return result
 
 def knn_test(data: list[torch.Tensor], cfg: Config, k: int = 5, model: UMAPMixture | None = None, return_values: bool = False) -> float | None:
+    """Evaluate cross-modal retrieval accuracy using k-nearest neighbors.
+
+    For each sample, checks if the corresponding sample in the other modality
+    appears among its k nearest neighbors. Computed bidirectionally for all
+    modality pairs.
+
+    Args:
+        data: Dictionary mapping modality names to tensors.
+        cfg: Configuration object with inference hyperparameters.
+        k: Number of nearest neighbors to consider.
+        model: Trained UMAPMixture model.
+        return_values: If True, return the accuracy score.
+
+    Returns:
+        Average kNN retrieval accuracy if return_values is True, else None.
+    """
     data = [data[key] for key in data]
     num_modes = len(data)
 

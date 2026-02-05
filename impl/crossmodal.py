@@ -6,6 +6,19 @@ from .model import UMAPMixture, device
 from .util import Config, embed_and_recon
 
 def crossmodal_recon(data: list[torch.Tensor], cfg: Config, model: UMAPMixture | None = None) -> list[torch.Tensor]:
+    """Perform text-to-image cross-modal reconstruction and visualize results.
+
+    Embeds text features, reconstructs to image latent space, decodes using
+    Stable Diffusion VAE, and saves comparison images to results/ directory.
+
+    Args:
+        data: List of [text_tensor, image_tensor] for reconstruction.
+        cfg: Configuration object with inference hyperparameters.
+        model: Trained UMAPMixture model.
+
+    Returns:
+        List of reconstructed image latent tensors.
+    """
     recons = []
     losses = []
 

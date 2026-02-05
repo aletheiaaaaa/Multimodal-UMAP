@@ -9,6 +9,19 @@ import numpy as np
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class UMAPEncoder:
+    """Single-modality UMAP encoder for graph construction and spectral embedding.
+
+    Handles fuzzy kNN graph construction using NN-descent and initial spectral
+    embedding via normalized Laplacian eigenvectors.
+
+    Attributes:
+        k_neighbors: Number of neighbors for kNN graph.
+        out_dim: Output embedding dimensionality.
+        id: Encoder identifier for progress display.
+        sigmas: Learned bandwidth parameters for fuzzy set membership.
+        rhos: Distance to nearest neighbor for each point.
+    """
+
     def __init__(self, k_neighbors: int, out_dim: int, id: int = 0):
         self.k_neighbors = k_neighbors
         self.out_dim = out_dim
@@ -17,6 +30,18 @@ class UMAPEncoder:
         self.rhos = None
 
     def get_sigmas(self, dists: torch.Tensor, min_dists: torch.Tensor, num_iters: int = 20) -> torch.Tensor:
+        """Compute sigma values for fuzzy set membership using Newton's method.
+
+        Finds sigma such that sum of membership probabilities equals log2(k_neighbors).
+
+        Args:
+            dists: Distance matrix of shape (N, k_neighbors).
+            min_dists: Minimum distances (rho) for each point.
+            num_iters: Number of Newton iterations.
+
+        Returns:
+            Tensor of sigma values with shape (N,).
+        """
         def diff(sigmas: torch.Tensor) -> torch.Tensor:
             ps = torch.exp(- (dists - min_dists) / sigmas.unsqueeze(1))
             sums = ps.view(-1, self.k_neighbors).sum(dim=1)
@@ -36,6 +61,23 @@ class UMAPEncoder:
         return self.sigmas
 
     def fuzzy_knn_graph(self, inputs: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref_data: torch.Tensor | None = None, num_iters: int = 10, a: float | None = None, b: float | None = None) -> torch.Tensor:
+        """Build approximate kNN graph using NN-descent algorithm.
+
+        Constructs a fuzzy simplicial set representation of the data manifold
+        with memory-efficient batched distance computation.
+
+        Args:
+            inputs: Input data tensor of shape (N, D).
+            mode: One of "fit", "transform", or "invert".
+            query: Query points for transform/invert modes.
+            ref_data: Reference adjacency for neighbor candidates.
+            num_iters: Number of NN-descent iterations.
+            a: UMAP curve parameter (for invert mode).
+            b: UMAP curve parameter (for invert mode).
+
+        Returns:
+            Sparse adjacency tensor with fuzzy membership weights.
+        """
         N = inputs.size(0)
         Q = query.size(0) if query is not None else N
 
@@ -167,6 +209,14 @@ class UMAPEncoder:
 
     @torch.no_grad()
     def embed_all(self, input: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Compute spectral embedding via LOBPCG on normalized Laplacian.
+
+        Args:
+            input: Sparse adjacency matrix.
+
+        Returns:
+            Eigenvectors corresponding to smallest non-trivial eigenvalues.
+        """
         n = input.size(0)
 
         deg = input.sum(dim=1).to_dense().clamp(min=1e-6)
@@ -183,6 +233,15 @@ class UMAPEncoder:
     
     @torch.no_grad()
     def embed_query(self, ref: torch.Tensor, query: torch.Tensor) -> torch.Tensor:
+        """Embed query points using weighted average of reference embeddings.
+
+        Args:
+            ref: Reference embeddings tensor.
+            query: Sparse affinity matrix from query to reference points.
+
+        Returns:
+            Query embeddings as weighted combination of reference embeddings.
+        """
         row_sums = query.sum(dim=1).to_dense().clamp(min=1e-6)
         indices = query.indices()
         values = query.values() / row_sums[indices[0]]
@@ -191,6 +250,20 @@ class UMAPEncoder:
         return sp.mm(normalized, ref)
 
     def init(self, input: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref_data: torch.Tensor | None = None, ref_embeds: torch.Tensor | None = None, a: float | None = None, b: float | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+        """Initialize graph and embeddings for a single modality.
+
+        Args:
+            input: Input data or reference data depending on mode.
+            mode: "fit" for training, "transform" for embedding, "invert" for reconstruction.
+            query: Query points for transform/invert modes.
+            ref_data: Reference graph for neighbor lookup.
+            ref_embeds: Reference embeddings for out-of-sample extension.
+            a: UMAP curve parameter.
+            b: UMAP curve parameter.
+
+        Returns:
+            Tuple of (adjacency graph, initial embeddings).
+        """
         graph = self.fuzzy_knn_graph(input, mode, query, ref_data, num_iters=10, a=a, b=b)
         if mode == "fit":
             graph = (graph + graph.transpose(0, 1) - graph * graph.transpose(0, 1)).coalesce()
@@ -203,6 +276,23 @@ class UMAPEncoder:
         return graph, embed
 
 class UMAPMixture:
+    """Multimodal UMAP model with cross-modal alignment.
+
+    Learns a shared embedding space for multiple modalities using UMAP's
+    manifold learning combined with InfoNCE contrastive alignment.
+
+    Attributes:
+        k_neighbors: Number of neighbors for kNN graphs.
+        out_dim: Shared embedding dimensionality.
+        min_dist: Minimum distance for UMAP curve.
+        num_encoders: Number of modality-specific encoders.
+        a, b: Fitted UMAP curve parameters.
+        encoders: List of UMAPEncoder instances.
+        data: Training data for each modality.
+        graphs: Fuzzy kNN graphs for each modality.
+        embeds: Learned embeddings for each modality.
+    """
+
     def __init__(self, k_neighbors: int, out_dim: int, min_dist: float, num_encoders: int):
         self.k_neighbors = k_neighbors
         self.out_dim = out_dim
@@ -413,6 +503,17 @@ class UMAPMixture:
         return embeds
 
     def fit(self, inputs: list[torch.Tensor], epochs: int, num_rep: int = 8, lr: float = 0.2, alpha: float = 0.5, batch_size: int = 512, save_dir: str | None = None) -> torch.Tensor | None:
+        """Fit the model to multimodal training data.
+
+        Args:
+            inputs: List of tensors, one per modality with shape (N, D_i).
+            epochs: Number of training epochs.
+            num_rep: Negative samples per positive.
+            lr: Learning rate.
+            alpha: InfoNCE loss weight.
+            batch_size: Batch size.
+            save_dir: Path to save loss history.
+        """
         graphs, embeds = self.init(inputs, mode="fit")
         self.graphs = graphs
         self.data = inputs
@@ -431,10 +532,37 @@ class UMAPMixture:
         )
 
     def fit_transform(self, inputs: list[torch.Tensor], epochs: int, num_rep: int = 8, lr: float = 0.2, alpha: float = 0.5, batch_size: int = 512) -> torch.Tensor:
+        """Fit the model and return training embeddings.
+
+        Args:
+            inputs: List of tensors, one per modality.
+            epochs: Number of training epochs.
+            num_rep: Negative samples per positive.
+            lr: Learning rate.
+            alpha: InfoNCE loss weight.
+            batch_size: Batch size.
+
+        Returns:
+            List of embedding tensors for training data.
+        """
         self.fit(inputs, epochs, num_rep, lr, alpha, batch_size)
         return self.embeds
 
     def transform(self, inputs: list[torch.Tensor], epochs: int, data_indices: list | None = None, num_rep: int = 8, lr: float = 0.2, alpha: float = 0.5, batch_size: int = 512) -> torch.Tensor:
+        """Embed new data into the learned latent space.
+
+        Args:
+            inputs: List of tensors to embed.
+            epochs: Number of optimization epochs.
+            data_indices: Which encoder to use for each input.
+            num_rep: Negative samples per positive.
+            lr: Learning rate.
+            alpha: InfoNCE loss weight.
+            batch_size: Batch size.
+
+        Returns:
+            List of embedding tensors.
+        """
         graphs, embeds = self.init(inputs, mode="transform", data_indices=data_indices)
 
         return self._train(
@@ -451,6 +579,20 @@ class UMAPMixture:
         )
     
     def inverse_transform(self, inputs: list[torch.Tensor], epochs: int, data_indices: list | None = None, num_rep: int = 8, lr: float = 0.2, alpha: float = 0.5, batch_size: int = 512) -> torch.Tensor:
+        """Reconstruct original features from embeddings.
+
+        Args:
+            inputs: List of embedding tensors to invert.
+            epochs: Number of optimization epochs.
+            data_indices: Target modality for each reconstruction.
+            num_rep: Negative samples per positive.
+            lr: Learning rate.
+            alpha: Loss weight (unused in invert mode).
+            batch_size: Batch size.
+
+        Returns:
+            List of reconstructed feature tensors.
+        """
         graphs, embeds = self.init(inputs, mode="invert", data_indices=data_indices)
 
         return self._train(
@@ -467,6 +609,17 @@ class UMAPMixture:
         )
 
     def get_ab_coeffs(self, min_dist: float, num_iters: int = 50) -> tuple[float, float]:
+        """Fit UMAP curve parameters a and b using Gauss-Newton optimization.
+
+        Finds a, b such that 1/(1 + a*d^(2b)) approximates the target membership function.
+
+        Args:
+            min_dist: Minimum distance parameter controlling tightness.
+            num_iters: Number of Gauss-Newton iterations.
+
+        Returns:
+            Tuple of (a, b) coefficients.
+        """
         def target(dist: torch.Tensor) -> torch.Tensor:
             return torch.where(dist <= min_dist, torch.tensor(1.0).to(device), torch.exp(-(dist - min_dist)))
 
@@ -489,6 +642,16 @@ class UMAPMixture:
         return (betas[0].abs() + 1e-6).item(), (betas[1].abs() + 1e-6).item()
 
     def init(self, inputs: list[torch.Tensor], mode: str = "fit", data_indices: list | None = None) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+        """Initialize graphs and embeddings for all modalities.
+
+        Args:
+            inputs: Input tensors for each modality.
+            mode: "fit", "transform", or "invert".
+            data_indices: Encoder indices for transform/invert modes.
+
+        Returns:
+            Tuple of (graphs list, embeddings list).
+        """
         if mode not in ["fit", "transform", "invert"]:
             raise ValueError(f"Invalid mode: {mode}")
 
@@ -511,6 +674,13 @@ class UMAPMixture:
         return graphs, embeds
 
     def save_state_dict(self, path: str) -> None:
+        """Save complete model state to disk.
+
+        Warning: This includes training data, graphs, and embeddings.
+
+        Args:
+            path: File path for the checkpoint.
+        """
         print(f"Warning: save_state_dict() saves the entire model state, which includes the source dataset. Make sure this is intended before proceeding.")
 
         state_dict = {
@@ -533,6 +703,14 @@ class UMAPMixture:
 
     @classmethod
     def load_state_dict(cls, path: str) -> "UMAPMixture":
+        """Load a saved model from disk.
+
+        Args:
+            path: Path to the saved checkpoint.
+
+        Returns:
+            Restored UMAPMixture model ready for inference.
+        """
         state_dict = torch.load(path)
 
         model = cls(
