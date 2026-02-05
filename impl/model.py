@@ -510,7 +510,7 @@ class UMAPMixture:
 
         return graphs, embeds
 
-    def save_state_dict(self, path: str):
+    def save_state_dict(self, path: str) -> None:
         state_dict = {
             'k_neighbors': self.k_neighbors,
             'out_dim': self.out_dim,
@@ -529,20 +529,26 @@ class UMAPMixture:
 
         torch.save(state_dict, path)
 
-    def load_state_dict(self, path: str):
+    @classmethod
+    def load_state_dict(cls, path: str) -> "UMAPMixture":
         state_dict = torch.load(path)
 
-        self.k_neighbors = state_dict['k_neighbors']
-        self.out_dim = state_dict['out_dim']
-        self.min_dist = state_dict['min_dist']
-        self.num_encoders = state_dict['num_encoders']
-        self.a = state_dict['a']
-        self.b = state_dict['b']
+        model = cls(
+            k_neighbors=state_dict['k_neighbors'],
+            out_dim=state_dict['out_dim'],
+            min_dist=state_dict['min_dist'],
+            num_encoders=state_dict['num_encoders'],
+        )
 
-        for encoder, enc_state in zip(self.encoders, state_dict['encoders']):
-            encoder.sigmas = enc_state['sigmas']
-            encoder.rhos = enc_state['rhos']
+        model.a = state_dict['a']
+        model.b = state_dict['b']
 
-        self.data = state_dict['data']
-        self.graphs = state_dict['graphs']
-        self.embeds = state_dict['embeds']
+        for encoder, encoder_state in zip(model.encoders, state_dict['encoders']):
+            encoder.sigmas = encoder_state['sigmas']
+            encoder.rhos = encoder_state['rhos']
+
+        model.data = state_dict['data']
+        model.graphs = state_dict['graphs']
+        model.embeds = state_dict['embeds']
+
+        return model

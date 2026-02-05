@@ -5,6 +5,7 @@ from impl.validation import similarity_test, knn_test
 from impl.crossmodal import crossmodal_recon
 from impl.util import Config, train
 from impl.dataset import load_data
+from impl.model import UMAPMixture
 
 def init_parser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Cross-modal UMAP Mixture Model Experiments")
@@ -18,11 +19,14 @@ def init_parser() -> argparse.Namespace:
     parser.add_argument("--lr", type=float, default=0.01, help="Learning rate")
     parser.add_argument("--alpha", type=float, default=1.0, help="Cross-modal alignment weight")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
-    parser.add_argument("--save_dir", type=str, default=None, help="Directory to log training losses")
+    parser.add_argument("--log_dir", type=str, default=None, help="Directory to log training losses")
 
     parser.add_argument("--test_epochs", type=int, default=100, help="Number of testing epochs")
     parser.add_argument("--k_test", type=int, default=1, help="Number of neighbors for k-NN test")
     parser.add_argument("--crossmodal", type=str, default="yes", choices=["yes", "no"], help="Whether to save cross-modal reconstructions")
+
+    parser.add_argument("--load-pretrained", type=str, default="no", choices=["yes", "no"], help="Whether to load a pretrained model")
+    parser.add_argument("--save_dir", type=str, default="models/flickr30k.pt", help="Path to save the trained model")
 
     args = parser.parse_args()
 
@@ -45,7 +49,10 @@ if __name__ == "__main__":
     train_split = load_data(split="train")
     test_split = load_data(split="validation")
 
-    model = train(train_split, cfg, args.save_dir)
+    if args.load_pretrained == "yes":
+        model = UMAPMixture.load_state_dict(args.save_dir)
+    else:
+        model = train(train_split, cfg, save_dir=args.save_dir)
 
     similarity_test(test_split, cfg, model=model)
     knn_test(test_split, cfg, k=args.k_test, model=model)
@@ -55,4 +62,5 @@ if __name__ == "__main__":
         samples = list(v[indices] for v in test_split.values())
         crossmodal_recon(samples, cfg, model=model)
 
-    model.save_state_dict("models/flickr30k.pt")
+    if args.save_dir is not None:
+        model.save_state_dict(args.save_dir)
