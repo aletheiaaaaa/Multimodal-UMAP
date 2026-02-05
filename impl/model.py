@@ -511,6 +511,8 @@ class UMAPMixture:
         return graphs, embeds
 
     def save_state_dict(self, path: str) -> None:
+        print(f"Warning: save_state_dict() saves the entire model state, which includes the source dataset. Make sure this is intended before sharing the saved file.")
+
         state_dict = {
             'k_neighbors': self.k_neighbors,
             'out_dim': self.out_dim,
