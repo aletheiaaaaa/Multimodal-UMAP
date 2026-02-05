@@ -1,4 +1,4 @@
 data/
 losses/
-src/__pycache__/
+impl/__pycache__/
 models/
