@@ -1,13 +1,12 @@
 import torch
 from torch.nn import functional as F
 
-from .model import UMAPMixture
+from .model import UMAPMixture, device
 from .util import Config, embed
 
 def similarity_test(data: list[torch.Tensor], cfg: Config, model: UMAPMixture | None = None, return_values: bool = False) -> float | None:
+    data = [data[key] for key in data]
     num_modes = len(data)
-    if num_modes < 2:
-        raise ValueError("At least two modes are required for similarity test.")
 
     embeds = embed(model, data, list(range(num_modes)), cfg)
     embeds = [F.normalize(e, p=2, dim=1) for e in embeds]
@@ -25,8 +24,11 @@ def similarity_test(data: list[torch.Tensor], cfg: Config, model: UMAPMixture | 
         return result
 
 def knn_test(data: list[torch.Tensor], cfg: Config, k: int = 5, model: UMAPMixture | None = None, return_values: bool = False) -> float | None:
+    data = [data[key] for key in data]
+    num_modes = len(data)
+
     accs = []
-    for (src, dst) in [(i, j) for i in range(len(data)) for j in range(i+1, len(data))]:
+    for (src, dst) in [(i, j) for i in range(num_modes) for j in range(i+1, num_modes)]:
         embeds = embed(model, [data[src], data[dst]], [src, dst], cfg)
         src_embed, dst_embed = embeds[0], embeds[1]
 
@@ -45,7 +47,7 @@ def knn_test(data: list[torch.Tensor], cfg: Config, k: int = 5, model: UMAPMixtu
         acc = correct / (2 * src_embed.shape[0])
         accs.append(acc)
 
-    result = torch.tensor(accs).mean().item()
+    result = torch.tensor(accs).to(device).mean().item()
     print(f"Average KNN accuracy: {result:.4f}")
 
     if return_values:

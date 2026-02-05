@@ -6,6 +6,8 @@ from torch.nn import functional as F
 from tqdm import tqdm
 import numpy as np
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 class UMAPEncoder:
     def __init__(self, k_neighbors: int, out_dim: int, id: int = 0):
         self.k_neighbors = k_neighbors
@@ -21,8 +23,8 @@ class UMAPEncoder:
 
             return sums - target
 
-        sigmas = torch.ones(dists.size(0), requires_grad=True)
-        target = torch.log2(torch.tensor(self.k_neighbors))
+        sigmas = torch.ones(dists.size(0), requires_grad=True).to(device)
+        target = torch.log2(torch.tensor(self.k_neighbors)).to(device)
 
         for _ in range(num_iters):
             vals = diff(sigmas)
@@ -37,8 +39,8 @@ class UMAPEncoder:
         N = inputs.size(0)
         Q = query.size(0) if query is not None else N
 
-        rows = torch.arange(Q).repeat_interleave(self.k_neighbors)
-        cols = torch.randint(0, N, (Q * self.k_neighbors,))
+        rows = torch.arange(Q).repeat_interleave(self.k_neighbors).to(device)
+        cols = torch.randint(0, N, (Q * self.k_neighbors,)).to(device)
 
         if ref_data is None:
             mask = cols != rows
@@ -50,7 +52,7 @@ class UMAPEncoder:
         rows = mask // N
         cols = mask % N
 
-        ones = torch.ones((mask.size(0),))
+        ones = torch.ones((mask.size(0),)).to(device)
 
         # Batch distance computation to save memory
         num_edges = rows.size(0)
@@ -141,14 +143,14 @@ class UMAPEncoder:
             all_dists = all_dists[idx]
 
             counts = torch.bincount(all_rows, minlength=Q)
-            positions = torch.arange(all_rows.size(0)) - torch.repeat_interleave(torch.cat([torch.tensor([0]), counts.cumsum(0)[:-1]]), counts)
+            positions = (torch.arange(all_rows.size(0)) - torch.repeat_interleave(torch.cat([torch.tensor([0]), counts.cumsum(0)[:-1]]), counts)).to(device)
 
             mask = positions < self.k_neighbors
             rows = all_rows[mask]
             cols = all_cols[mask]
             dists = all_dists[mask]
 
-            ones = torch.ones(rows.size(0))
+            ones = torch.ones(rows.size(0)).to(device)
 
         dists = dists.view(Q, self.k_neighbors)
         if mode != "invert":
@@ -168,11 +170,11 @@ class UMAPEncoder:
         n = input.size(0)
 
         deg = input.sum(dim=1).to_dense().clamp(min=1e-6)
-        diag = sp.spdiags(deg.pow(-0.5), torch.zeros(1, dtype=torch.long), (input.size(0), input.size(0)))
+        diag = sp.spdiags(deg.pow(-0.5), torch.zeros(1, dtype=torch.long), (input.size(0), input.size(0))).to(device)
 
         normalized = sp.mm(sp.mm(diag, input), diag)
-        identity = sp.spdiags(torch.ones(n), torch.zeros(1, dtype=torch.long), (n, n))
-        eps = sp.spdiags(torch.full((n,), 1e-6), torch.zeros(1, dtype=torch.long), (n, n))
+        identity = sp.spdiags(torch.ones(n), torch.zeros(1, dtype=torch.long), (n, n)).to(device)
+        eps = sp.spdiags(torch.full((n,), 1e-6), torch.zeros(1, dtype=torch.long), (n, n)).to(device)
         pre = identity - normalized + eps
 
         _, vectors = torch.lobpcg(pre, k=self.out_dim + 1, largest=False)
@@ -217,7 +219,7 @@ class UMAPMixture:
 
     def _umap_attr_loss(self, embeds: torch.Tensor, i_idx: torch.Tensor, j_idx: torch.Tensor, a: float, b: float, ref: torch.Tensor | None = None) -> torch.Tensor:
         if i_idx.size(0) == 0:
-            return torch.tensor(0.0, requires_grad=True)
+            return torch.tensor(0.0, requires_grad=True).to(device)
 
         embeds_i = embeds[i_idx]
         embeds_j = ref[j_idx] if ref is not None else embeds[j_idx]
@@ -229,7 +231,7 @@ class UMAPMixture:
 
     def _umap_rep_loss(self, embeds: torch.Tensor, i_idx: torch.Tensor, j_idx: torch.Tensor, a: float, b: float, ref: torch.Tensor | None = None) -> torch.Tensor:
         if i_idx.size(0) == 0:
-            return torch.tensor(0.0, requires_grad=True)
+            return torch.tensor(0.0, requires_grad=True).to(device)
 
         embeds_i = embeds[i_idx]
         embeds_j = ref[j_idx] if ref is not None else embeds[j_idx]
@@ -241,7 +243,7 @@ class UMAPMixture:
 
     def _inv_attr_loss(self, embeds: torch.Tensor, i_idx: torch.Tensor, j_idx: torch.Tensor, a: float, b: float, ref: torch.Tensor, sigma: torch.Tensor) -> torch.Tensor:
         if i_idx.size(0) == 0:
-            return torch.tensor(0.0, requires_grad=True)
+            return torch.tensor(0.0, requires_grad=True).to(device)
 
         embeds_i = embeds[i_idx]
         embeds_j = ref[j_idx]
@@ -255,7 +257,7 @@ class UMAPMixture:
 
     def _inv_rep_loss(self, embeds: torch.Tensor, i_idx: torch.Tensor, j_idx: torch.Tensor, ref: torch.Tensor, sigma: torch.Tensor, rho: torch.Tensor) -> torch.Tensor:
         if i_idx.size(0) == 0:
-            return torch.tensor(0.0, requires_grad=True)
+            return torch.tensor(0.0, requires_grad=True).to(device)
 
         embeds_i = embeds[i_idx]
         embeds_j = ref[j_idx]
@@ -270,13 +272,13 @@ class UMAPMixture:
     def _infonce_loss(self, embeds_0: torch.Tensor, embeds_1: torch.Tensor, n_neg: int = 8, temperature: float = 0.5) -> torch.Tensor:
         num_samples = min(embeds_0.size(0), embeds_1.size(0))
         if num_samples == 0:
-            return torch.tensor(0.0, requires_grad=True)
+            return torch.tensor(0.0, requires_grad=True).to(device)
 
         batch_size = 1000
         losses = []
 
         # Batch computation to avoid OOM
-        indices = torch.randperm(num_samples)
+        indices = torch.randperm(num_samples).to(device)
         for start in range(0, num_samples, batch_size):
             end = min(start + batch_size, num_samples)
             batch_indices = indices[start:end]
@@ -286,7 +288,7 @@ class UMAPMixture:
             pos_sim = (anchors_norm * positives_norm).sum(dim=1) / temperature
 
             true_batch_size = batch_indices.size(0)
-            neg_idx = torch.randint(0, num_samples, (true_batch_size, n_neg + 1))
+            neg_idx = torch.randint(0, num_samples, (true_batch_size, n_neg + 1)).to(device)
             negatives = embeds_1[neg_idx]
 
             mask = neg_idx != batch_indices.unsqueeze(1)
@@ -340,7 +342,7 @@ class UMAPMixture:
                     batch_indices = indices[:, batch]
                     batch_values = values[batch]
 
-                    keep = torch.rand(batch_values.size(0)) < batch_values
+                    keep = torch.rand(batch_values.size(0)).to(device) < batch_values
                     i_idx_attr = batch_indices[0][keep]
                     j_idx_attr = batch_indices[1][keep]
 
@@ -351,7 +353,7 @@ class UMAPMixture:
 
                     num_pairs = i_idx_attr.size(0)
                     i_idx_rep = i_idx_attr.repeat_interleave(num_rep)
-                    l_idx_rep = torch.randint(0, count, (num_pairs, num_rep)).flatten()
+                    l_idx_rep = torch.randint(0, count, (num_pairs, num_rep)).flatten().to(device)
 
                     if mode == "invert":
                         loss_rep = self._inv_rep_loss(embed, i_idx_rep, l_idx_rep, ref_embed, self.encoders[i].sigmas, self.encoders[i].rhos)
@@ -368,7 +370,7 @@ class UMAPMixture:
             # Compute InfoNCE losses between modalities for cross-modal alignment
             if mode != "invert":
                 num_embeds = len(embeds)
-                infonce_losses = [torch.tensor(0.0, requires_grad=True) for _ in range(num_embeds)]
+                infonce_losses = [torch.tensor(0.0, requires_grad=True).to(device) for _ in range(num_embeds)]
 
                 for i in range(num_embeds):
                     for j in range(i + 1, num_embeds):
@@ -466,7 +468,7 @@ class UMAPMixture:
 
     def get_ab_coeffs(self, min_dist: float, num_iters: int = 50) -> tuple[float, float]:
         def target(dist: torch.Tensor) -> torch.Tensor:
-            return torch.where(dist <= min_dist, torch.tensor(1.0), torch.exp(-(dist - min_dist)))
+            return torch.where(dist <= min_dist, torch.tensor(1.0).to(device), torch.exp(-(dist - min_dist)))
 
         def estimate(dist: torch.Tensor, betas: torch.Tensor) -> torch.Tensor:
             a, b = betas[0].abs() + 1e-6, betas[1].abs() + 1e-6
@@ -475,8 +477,8 @@ class UMAPMixture:
         def residuals(distances: torch.Tensor, betas: torch.Tensor) -> torch.Tensor:
             return target(distances) - estimate(distances, betas)
 
-        betas = torch.tensor([1.0, 1.0])
-        distances = torch.linspace(1e-4, 3.0, 200)
+        betas = torch.tensor([1.0, 1.0]).to(device)
+        distances = torch.linspace(1e-4, 3.0, 200).to(device)
 
         for _ in tqdm(range(num_iters), desc="Estimating a/b coefficients"):
             res = residuals(distances, betas)
@@ -507,3 +509,40 @@ class UMAPMixture:
             embeds.append(embed)
 
         return graphs, embeds
+
+    def save_state_dict(self, path: str):
+        state_dict = {
+            'k_neighbors': self.k_neighbors,
+            'out_dim': self.out_dim,
+            'min_dist': self.min_dist,
+            'num_encoders': self.num_encoders,
+            'a': self.a,
+            'b': self.b,
+            'encoders': [{
+                'sigmas': encoder.sigmas,
+                'rhos': encoder.rhos
+            } for encoder in self.encoders],
+            'data': self.data,
+            'graphs': self.graphs,
+            'embeds': self.embeds
+        }
+
+        torch.save(state_dict, path)
+
+    def load_state_dict(self, path: str):
+        state_dict = torch.load(path)
+
+        self.k_neighbors = state_dict['k_neighbors']
+        self.out_dim = state_dict['out_dim']
+        self.min_dist = state_dict['min_dist']
+        self.num_encoders = state_dict['num_encoders']
+        self.a = state_dict['a']
+        self.b = state_dict['b']
+
+        for encoder, enc_state in zip(self.encoders, state_dict['encoders']):
+            encoder.sigmas = enc_state['sigmas']
+            encoder.rhos = enc_state['rhos']
+
+        self.data = state_dict['data']
+        self.graphs = state_dict['graphs']
+        self.embeds = state_dict['embeds']
