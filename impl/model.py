@@ -675,6 +675,9 @@ class UMAPMixture:
             'embeds': self.embeds
         }
 
+        if not os.path.exists(os.path.dirname(path)):
+            os.makedirs(os.path.dirname(path))
+
         torch.save(state_dict, path)
 
     @classmethod
