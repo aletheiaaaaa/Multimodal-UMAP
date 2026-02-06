@@ -1,11 +1,11 @@
 import torch
+import os
 from torch import linalg as LA
 from torch import sparse as sp
 from torch import autograd
 from torch.autograd import functional as AF
 from torch.nn import functional as F
 from tqdm import tqdm
-import numpy as np
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -489,18 +489,21 @@ class UMAPMixture:
 
         if save_dir is not None:
             save_dict = {
-                'total_loss': np.array(loss_history['total_loss']),
-                'epochs': np.arange(len(loss_history['total_loss']))
+                'total_loss': torch.tensor(loss_history['total_loss']),
+                'epochs': torch.arange(len(loss_history['total_loss']))
             }
 
             for i in range(len(embeds)):
-                save_dict[f'umap_loss_{i}'] = np.array(loss_history['umap_losses'][i])
+                save_dict[f'umap_loss_{i}'] = torch.tensor(loss_history['umap_losses'][i])
 
             if mode == "fit" and loss_history['infonce_losses'] is not None:
                 for i in range(len(embeds)):
-                    save_dict[f'infonce_loss_{i}'] = np.array(loss_history['infonce_losses'][i])
+                    save_dict[f'infonce_loss_{i}'] = torch.tensor(loss_history['infonce_losses'][i])
 
-            np.savez(save_dir, **save_dict)
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+
+            torch.save(save_dict, os.path.join(save_dir, f"{mode}_loss_history.pt"))
 
         return embeds
 
