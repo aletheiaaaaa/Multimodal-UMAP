@@ -402,7 +402,8 @@ class UMAPMixture:
 
         optimizer = torch.optim.Adam(embeds, lr=lr)
 
-        for epoch in tqdm(range(epochs), desc=desc):
+        pbar = tqdm(range(epochs), desc=desc)
+        for epoch in pbar:
             umap_losses = []
             n_modes = len(embeds) if data_indices is None else len(data_indices)
 
@@ -474,7 +475,7 @@ class UMAPMixture:
             optimizer.zero_grad()
 
             if epoch % 50 == 0 or epoch == epochs - 1:
-                tqdm.set_description(desc=f"{desc} (loss: {loss.item():.4f})")
+                pbar.set_description(desc=f"{desc} (loss: {loss.item():.4f})")
 
         return embeds
 
