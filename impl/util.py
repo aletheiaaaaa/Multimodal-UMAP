@@ -30,13 +30,12 @@ class Config:
 
     test_epochs: int
 
-def train(data: dict, cfg: Config, save_dir: str | None = None) -> UMAPMixture:
+def train(data: dict, cfg: Config) -> UMAPMixture:
     """Train a multimodal UMAP model on the provided data.
 
     Args:
         data: Dictionary mapping modality names to tensors of shape (N, D).
         cfg: Configuration object with training hyperparameters.
-        save_dir: Optional path to save loss history as .npz file.
 
     Returns:
         Trained UMAPMixture model.
@@ -57,7 +56,6 @@ def train(data: dict, cfg: Config, save_dir: str | None = None) -> UMAPMixture:
         lr=cfg.lr,
         alpha=cfg.alpha,
         batch_size=cfg.batch_size,
-        save_dir=save_dir
     )
 
     return model

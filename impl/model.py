@@ -393,7 +393,7 @@ class UMAPMixture:
 
         return torch.stack(losses).mean()
 
-    def _train(self, embeds: list[torch.Tensor], graphs: list[torch.Tensor], epochs: int, num_rep: int, lr: float, alpha: float, batch_size: int, mode: str = "fit", data_indices: list | None = None, desc: str = "Training", save_dir: str | None = None):
+    def _train(self, embeds: list[torch.Tensor], graphs: list[torch.Tensor], epochs: int, num_rep: int, lr: float, alpha: float, batch_size: int, mode: str = "fit", data_indices: list | None = None, desc: str = "Training"):
         embeds = [e.clone().detach().to(device).requires_grad_(True) for e in embeds]
 
         if mode == "transform":
@@ -401,12 +401,6 @@ class UMAPMixture:
                 ref.requires_grad = False
 
         optimizer = torch.optim.Adam(embeds, lr=lr)
-
-        loss_history = {
-            'total_loss': [],
-            'umap_losses': [[] for _ in range(len(embeds))],
-            'infonce_losses': [[] for _ in range(len(embeds))] if mode == "fit" else None
-        }
 
         for epoch in tqdm(range(epochs), desc=desc):
             umap_losses = []
@@ -475,39 +469,16 @@ class UMAPMixture:
 
                 loss += sum(infonce_losses)
 
-            if save_dir is not None:
-                loss_history['total_loss'].append(loss.item())
-                for i, umap_loss in enumerate(umap_losses):
-                    loss_history['umap_losses'][i].append(umap_loss.item())
-                if mode == "fit":
-                    for i, infonce_loss in enumerate(infonce_losses):
-                        loss_history['infonce_losses'][i].append(infonce_loss.item())
-
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
 
-        if save_dir is not None:
-            save_dict = {
-                'total_loss': torch.tensor(loss_history['total_loss']),
-                'epochs': torch.arange(len(loss_history['total_loss']))
-            }
-
-            for i in range(len(embeds)):
-                save_dict[f'umap_loss_{i}'] = torch.tensor(loss_history['umap_losses'][i])
-
-            if mode == "fit" and loss_history['infonce_losses'] is not None:
-                for i in range(len(embeds)):
-                    save_dict[f'infonce_loss_{i}'] = torch.tensor(loss_history['infonce_losses'][i])
-
-            if not os.path.exists(save_dir):
-                os.makedirs(save_dir)
-
-            torch.save(save_dict, os.path.join(save_dir, f"{mode}_loss_history.pt"))
+            if epoch % 50 == 0 or epoch == epochs - 1:
+                tqdm.write(f"Epoch {epoch+1}/{epochs}, Loss: {loss.item():.4f}")
 
         return embeds
 
-    def fit(self, inputs: list[torch.Tensor], epochs: int, num_rep: int = 8, lr: float = 0.2, alpha: float = 0.5, batch_size: int = 512, save_dir: str | None = None) -> torch.Tensor | None:
+    def fit(self, inputs: list[torch.Tensor], epochs: int, num_rep: int = 8, lr: float = 0.2, alpha: float = 0.5, batch_size: int = 512) -> torch.Tensor | None:
         """Fit the model to multimodal training data.
 
         Args:
@@ -517,7 +488,6 @@ class UMAPMixture:
             lr: Learning rate.
             alpha: InfoNCE loss weight.
             batch_size: Batch size.
-            save_dir: Path to save loss history.
         """
         graphs, embeds = self.init(inputs, mode="fit")
         self.graphs = graphs
@@ -533,7 +503,6 @@ class UMAPMixture:
             batch_size,
             mode="fit",
             desc=f"Training {self.num_encoders} encoders",
-            save_dir=save_dir
         )
 
     def fit_transform(self, inputs: list[torch.Tensor], epochs: int, num_rep: int = 8, lr: float = 0.2, alpha: float = 0.5, batch_size: int = 512) -> torch.Tensor:

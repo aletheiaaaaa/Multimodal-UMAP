@@ -1,5 +1,6 @@
 import torch
 import argparse
+import os
 
 from impl.validation import similarity_test, knn_test
 from impl.crossmodal import crossmodal_recon
@@ -26,7 +27,7 @@ def init_parser() -> argparse.Namespace:
     parser.add_argument("--crossmodal", type=str, default="yes", choices=["yes", "no"], help="Whether to save cross-modal reconstructions")
 
     parser.add_argument("--load-pretrained", type=str, default="no", choices=["yes", "no"], help="Whether to load a pretrained model")
-    parser.add_argument("--save_dir", type=str, default="models/flickr30k.pt", help="Path to save the trained model")
+    parser.add_argument("--save_path", type=str, default="models/flickr30k.pt", help="Path to save the trained model")
 
     args = parser.parse_args()
 
@@ -50,9 +51,9 @@ if __name__ == "__main__":
     test_split = load_data(split="validation")
 
     if args.load_pretrained == "yes":
-        model = UMAPMixture.load_state_dict(args.save_dir)
+        model = UMAPMixture.load_state_dict(args.save_path)
     else:
-        model = train(train_split, cfg, save_dir=args.save_dir)
+        model = train(train_split, cfg)
 
     similarity_test(test_split, cfg, model=model)
     knn_test(test_split, cfg, k=args.k_test, model=model)
@@ -62,5 +63,5 @@ if __name__ == "__main__":
         samples = list(v[indices] for v in test_split.values())
         crossmodal_recon(samples, cfg, model=model)
 
-    if args.save_dir is not None:
-        model.save_state_dict(args.save_dir)
+    if args.save_path is not None:
+        model.save_state_dict(args.save_path)
