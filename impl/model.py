@@ -221,12 +221,12 @@ class UMAPEncoder:
         n = input.size(0)
 
         deg = input.sum(dim=1).to_dense().clamp(min=1e-6)
-        offsets = torch.zeros(1, dtype=torch.long, device=device)
-        diag = sp.spdiags(deg.pow(-0.5), offsets, (input.size(0), input.size(0)))
+        offsets = torch.zeros(1, dtype=torch.long)
+        diag = sp.spdiags(deg.cpu().pow(-0.5), offsets, (input.size(0), input.size(0))).to(device)
 
         normalized = sp.mm(sp.mm(diag, input), diag)
-        identity = sp.spdiags(torch.ones(n, device=device), offsets, (n, n))
-        eps = sp.spdiags(torch.full((n,), 1e-6, device=device), offsets, (n, n))
+        identity = sp.spdiags(torch.ones(n), offsets, (n, n)).to(device)
+        eps = sp.spdiags(torch.full((n,), 1e-6), offsets, (n, n)).to(device)
         pre = identity - normalized + eps
 
         _, vectors = torch.lobpcg(pre, k=self.out_dim + 1, largest=False)
