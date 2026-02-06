@@ -474,7 +474,7 @@ class UMAPMixture:
             optimizer.zero_grad()
 
             if epoch % 50 == 0 or epoch == epochs - 1:
-                tqdm.write(f"Epoch {epoch}/{epochs}, Loss: {loss.item():.4f}")
+                tqdm.set_description(f"{desc} (loss: {loss.item():.4f})")
 
         return embeds
 
