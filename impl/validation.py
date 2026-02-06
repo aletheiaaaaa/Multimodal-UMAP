@@ -78,7 +78,7 @@ def knn_test(data: list[torch.Tensor], cfg: Config, k: int = 5, model: UMAPMixtu
         accs.append(acc)
 
     result = torch.tensor(accs).to(device).mean().item()
-    print(f"Average KNN accuracy: {result:.4f}")
+    print(f"Average {k}-NN accuracy: {result:.4f}")
 
     if return_values:
         return result

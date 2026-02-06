@@ -55,6 +55,9 @@ if __name__ == "__main__":
     else:
         model = train(train_split, cfg)
 
+    if args.save_path is not None:
+        model.save_state_dict(args.save_path)
+
     similarity_test(test_split, cfg, model=model)
     knn_test(test_split, cfg, k=args.k_test, model=model)
 
@@ -62,6 +65,3 @@ if __name__ == "__main__":
         indices = torch.randperm(test_split["texts"].shape[0])[:16]
         samples = list(v[indices] for v in test_split.values())
         crossmodal_recon(samples, cfg, model=model)
-
-    if args.save_path is not None:
-        model.save_state_dict(args.save_path)
