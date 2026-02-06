@@ -394,7 +394,7 @@ class UMAPMixture:
         return torch.stack(losses).mean()
 
     def _train(self, embeds: list[torch.Tensor], graphs: list[torch.Tensor], epochs: int, num_rep: int, lr: float, alpha: float, batch_size: int, mode: str = "fit", data_indices: list | None = None, desc: str = "Training", save_dir: str | None = None):
-        embeds = [e.clone().detach().requires_grad_(True) for e in embeds]
+        embeds = [e.clone().detach().to(device).requires_grad_(True) for e in embeds]
 
         if mode == "transform":
             for ref in self.embeds:
@@ -518,7 +518,7 @@ class UMAPMixture:
         """
         graphs, embeds = self.init(inputs, mode="fit")
         self.graphs = graphs
-        self.data = inputs
+        self.data = [x.to(device) for x in inputs]
 
         self.embeds = self._train(
             embeds,
@@ -657,6 +657,7 @@ class UMAPMixture:
         if mode not in ["fit", "transform", "invert"]:
             raise ValueError(f"Invalid mode: {mode}")
 
+        inputs = [x.to(device) for x in inputs]
         graphs = []
         embeds = []
 
