@@ -48,7 +48,7 @@ if __name__ == "__main__":
     )
 
     train_split = load_data(split="train")
-    test_split = load_data(split="validation")
+    test_split = load_data(split="test")
 
     if args.load_pretrained == "yes":
         model = UMAPMixture.load_state_dict(args.save_path)
