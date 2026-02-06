@@ -1,6 +1,6 @@
 # Multimodal UMAP
 
-This repo originated as a challenge -- learn rich crossmodal representations of data by any means except neural networks. To do so, this project uses the UMAP dimensionality reduction algorithm to project data points into a shared latent space, in the hopes that the resulting representation is rich enough to use for cross-modal reconstruction. In effect, this project implements an autoencoder without the use of neural networks. Built primarily as a personal challenge, not polished enough for public use. For more information see the blog post.
+This repo originated as a challenge -- learn rich crossmodal representations of data by any means except neural networks. To do so, this project uses the UMAP dimensionality reduction algorithm to project data points into a shared latent space, in the hopes that the resulting representation is rich enough to use for cross-modal reconstruction. In effect, this project implements an autoencoder without the use of neural networks (though I do use pretrained neural networks to first extract features to make my life easier). Built primarily as a personal challenge, not polished enough for public use. For more information see the blog post.
 
 ## Installation and Usage
 
