@@ -455,7 +455,7 @@ class UMAPMixture:
             loss = sum(umap_losses)
 
             # Compute InfoNCE losses between modalities for cross-modal alignment
-            if mode != "invert":
+            if mode == "fit":
                 num_embeds = len(embeds)
                 infonce_losses = [torch.tensor(0.0, requires_grad=True).to(device) for _ in range(num_embeds)]
 
