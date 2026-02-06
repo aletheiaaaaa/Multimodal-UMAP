@@ -22,7 +22,7 @@ def init_parser() -> argparse.Namespace:
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
     parser.add_argument("--log_dir", type=str, default=None, help="Directory to log training losses")
 
-    parser.add_argument("--test_epochs", type=int, default=100, help="Number of testing epochs")
+    parser.add_argument("--test_epochs", type=int, default=200, help="Number of testing epochs")
     parser.add_argument("--k_test", type=int, default=1, help="Number of neighbors for k-NN test")
     parser.add_argument("--crossmodal", type=str, default="yes", choices=["yes", "no"], help="Whether to save cross-modal reconstructions")
 
