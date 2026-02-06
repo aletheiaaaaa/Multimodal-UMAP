@@ -642,7 +642,7 @@ class UMAPMixture:
             elif mode == "transform":
                 graph, embed = encoder.init(self.data[i], mode="transform", query=inputs[idx], ref_data=self.graphs[i], ref_embeds=self.embeds[i])
             else:
-                graph, embed = encoder.init(self.data[i], mode="invert", query=inputs[idx], ref_data=self.graphs[i], a=self.a, b=self.b)
+                graph, embed = encoder.init(self.embeds[i], mode="invert", query=inputs[idx], ref_data=self.graphs[i], a=self.a, b=self.b)
             graphs.append(graph)
             embeds.append(embed)
 
