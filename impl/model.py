@@ -1,6 +1,7 @@
 import torch
 from torch import linalg as LA
 from torch import sparse as sp
+from torch import autograd
 from torch.autograd import functional as AF
 from torch.nn import functional as F
 from tqdm import tqdm
@@ -53,7 +54,7 @@ class UMAPEncoder:
 
         for _ in range(num_iters):
             vals = diff(sigmas)
-            grads = torch.autograd.grad(vals.sum(), sigmas, create_graph=True)[0]
+            grads = autograd.grad(vals.sum(), sigmas, create_graph=True)[0]
 
             sigmas = (sigmas - vals / (grads + 1e-6)).clamp(min=1e-6).detach().requires_grad_(True)
 
