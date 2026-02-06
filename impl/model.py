@@ -474,7 +474,7 @@ class UMAPMixture:
             optimizer.step()
             optimizer.zero_grad()
 
-            if epoch % 50 == 0 or epoch == epochs - 1:
+            if epoch % 10 == 0 or epoch == epochs - 1:
                 pbar.set_description(desc=f"{desc} (loss: {loss.item():.4f})")
 
         return embeds
