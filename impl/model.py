@@ -186,7 +186,7 @@ class UMAPEncoder:
             all_dists = all_dists[idx]
 
             counts = torch.bincount(all_rows, minlength=Q)
-            positions = (torch.arange(all_rows.size(0)) - torch.repeat_interleave(torch.cat([torch.tensor([0]), counts.cumsum(0)[:-1]]), counts)).to(device)
+            positions = (torch.arange(all_rows.size(0), device=device) - torch.repeat_interleave(torch.cat([torch.tensor([0], device=device), counts.cumsum(0)[:-1]]), counts))
 
             mask = positions < self.k_neighbors
             rows = all_rows[mask]
@@ -221,11 +221,12 @@ class UMAPEncoder:
         n = input.size(0)
 
         deg = input.sum(dim=1).to_dense().clamp(min=1e-6)
-        diag = sp.spdiags(deg.pow(-0.5), torch.zeros(1, dtype=torch.long), (input.size(0), input.size(0))).to(device)
+        offsets = torch.zeros(1, dtype=torch.long, device=device)
+        diag = sp.spdiags(deg.pow(-0.5), offsets, (input.size(0), input.size(0)))
 
         normalized = sp.mm(sp.mm(diag, input), diag)
-        identity = sp.spdiags(torch.ones(n), torch.zeros(1, dtype=torch.long), (n, n)).to(device)
-        eps = sp.spdiags(torch.full((n,), 1e-6), torch.zeros(1, dtype=torch.long), (n, n)).to(device)
+        identity = sp.spdiags(torch.ones(n, device=device), offsets, (n, n))
+        eps = sp.spdiags(torch.full((n,), 1e-6, device=device), offsets, (n, n))
         pre = identity - normalized + eps
 
         _, vectors = torch.lobpcg(pre, k=self.out_dim + 1, largest=False)
