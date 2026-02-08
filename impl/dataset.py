@@ -3,14 +3,14 @@ import os
 from torchvision import transforms
 from datasets import load_dataset
 from transformers import AutoTokenizer, AutoModel
-from diffusers import AutoencoderKL
 from tqdm import tqdm
 
 def load_data(split: str) -> dict:
     """Load and preprocess Flickr30k dataset with cached feature extraction.
 
-    Extracts text features using BERT (pooler output) and image features using
-    Stable Diffusion VAE latents. Results are cached to data/{split}_data.pt.
+    Extracts text features using BERT (pooler output) to create "interesting" 
+    embeddings to learn, images are simply resized". Results are cached to 
+    data/{split}_data.pt.
 
     Args:
         split: Dataset split to load (e.g., "train", "test").
@@ -29,16 +29,15 @@ def load_data(split: str) -> dict:
 
     device = torch.device(device_str)
 
+    # Need to use an embedding model to get meaningful text features
     text_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
     text_model = AutoModel.from_pretrained("google-bert/bert-base-uncased").to(device)
 
     image_transform = transforms.Compose([
-        transforms.Resize((256, 256)),
-        transforms.CenterCrop(256),
+        transforms.Resize((64, 64)),
+        transforms.CenterCrop(64),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])
-    image_model = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse").to(device)
 
     texts = []
     images = []
@@ -53,9 +52,7 @@ def load_data(split: str) -> dict:
         texts.append(text_features)
 
         processed_images = torch.stack([image_transform(img) for img in image_list]).to(device)
-        with torch.no_grad():
-            image_features = image_model.encode(processed_images).latent_dist.mean
-        images.append(image_features.flatten(start_dim=1))
+        images.append(processed_images.flatten(start_dim=1))
 
     data_dict = {
         "texts": torch.cat(texts, dim=0),
