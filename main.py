@@ -26,7 +26,7 @@ def init_parser() -> argparse.Namespace:
     parser.add_argument("--k_test", type=int, default=1, help="Number of neighbors for k-NN test")
     parser.add_argument("--crossmodal", type=str, default="yes", choices=["yes", "no"], help="Whether to save cross-modal reconstructions")
 
-    parser.add_argument("--load-pretrained", type=str, default="no", choices=["yes", "no"], help="Whether to load a pretrained model")
+    parser.add_argument("--load_pretrained", type=str, default="no", choices=["yes", "no"], help="Whether to load a pretrained model")
     parser.add_argument("--save_path", type=str, default="models/flickr30k.pt", help="Path to save the trained model")
 
     args = parser.parse_args()
