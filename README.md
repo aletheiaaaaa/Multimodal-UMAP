@@ -7,7 +7,7 @@ This repo originated as a challenge -- learn rich crossmodal representations of 
 To get started, clone the repo and install the following dependencies:
 
 ```bash
-pip install tqdm numpy torch torchvision sklearn pickle matplotlib
+pip install tqdm numpy torch torchvision scikit-learn pickle-mixin matplotlib
 ```
 
 Then run `main.py` to train the model on flickr30k and evaluate the the results on a few metrics. To view the adjustable training parameters, enter `python main.py --help` in the terminal and adjust accordingly, sensible defaults have been chosen. Note that the training process may take a while, especially on older CPUs!
