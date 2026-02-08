@@ -34,8 +34,8 @@ def load_data(split: str) -> dict:
     text_model = AutoModel.from_pretrained("google-bert/bert-base-uncased").to(device)
 
     image_transform = transforms.Compose([
-        transforms.Resize((128, 128)),
-        transforms.CenterCrop(128),
+        transforms.Resize((64, 64)),
+        transforms.CenterCrop(64),
         transforms.ToTensor(),
     ])
 
