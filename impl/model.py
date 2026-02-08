@@ -58,8 +58,7 @@ class UMAPEncoder:
 
             sigmas = (sigmas - vals / (grads + 1e-6)).clamp(min=1e-6).detach().requires_grad_(True)
 
-        self.sigmas = sigmas.detach()
-        return self.sigmas
+        return sigmas.detach()
 
     def fuzzy_knn_graph(self, inputs: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref_data: torch.Tensor | None = None, num_iters: int = 10, a: float | None = None, b: float | None = None) -> torch.Tensor:
         """Build approximate kNN graph using NN-descent algorithm.
@@ -179,8 +178,8 @@ class UMAPEncoder:
             all_cols = torch.cat([cols, cand_cols], dim=0)
             all_dists = torch.cat([dists, cand_dists], dim=0)
 
-            # Sort by row, then by distance
-            idx = torch.argsort(all_rows * (all_dists.max() + 1e-2) + all_dists, stable=True)
+            idx = torch.argsort(all_dists, stable=True)
+            idx = idx[torch.argsort(all_rows[idx], stable=True)]
             all_rows = all_rows[idx]
             all_cols = all_cols[idx]
             all_dists = all_dists[idx]
@@ -201,7 +200,8 @@ class UMAPEncoder:
             sigmas = self.get_sigmas(dists, min_dists)
             weights = torch.exp(- (dists - min_dists) / sigmas.unsqueeze(1)).flatten()
             if mode == "fit":
-                self.rhos = min_dists[:, 0]  # First column contains the min dist
+                self.sigmas = sigmas
+                self.rhos = min_dists[:, 0]
         else:
             weights = 1.0 / (1.0 + a * dists.pow(2 * b)).flatten()
 
@@ -676,8 +676,9 @@ class UMAPMixture:
             'embeds': self.embeds
         }
 
-        if not os.path.exists(os.path.dirname(path)):
-            os.makedirs(os.path.dirname(path))
+        dirname = os.path.dirname(path)
+        if dirname and not os.path.exists(dirname):
+            os.makedirs(dirname)
 
         torch.save(state_dict, path)
 
@@ -693,16 +694,15 @@ class UMAPMixture:
         """
         state_dict = torch.load(path)
 
-        model = cls(
-            k_neighbors=state_dict['k_neighbors'],
-            out_dim=state_dict['out_dim'],
-            min_dist=state_dict['min_dist'],
-            num_encoders=state_dict['num_encoders'],
-        )
-
+        model = cls.__new__(cls)
+        model.k_neighbors = state_dict['k_neighbors']
+        model.out_dim = state_dict['out_dim']
+        model.min_dist = state_dict['min_dist']
+        model.num_encoders = state_dict['num_encoders']
         model.a = state_dict['a']
         model.b = state_dict['b']
 
+        model.encoders = [UMAPEncoder(model.k_neighbors, model.out_dim, id=i) for i in range(model.num_encoders)]
         for encoder, encoder_state in zip(model.encoders, state_dict['encoders']):
             encoder.sigmas = encoder_state['sigmas']
             encoder.rhos = encoder_state['rhos']

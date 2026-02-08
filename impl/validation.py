@@ -4,7 +4,7 @@ from torch.nn import functional as F
 from .model import UMAPMixture, device
 from .util import Config, embed
 
-def similarity_test(data: list[torch.Tensor], cfg: Config, model: UMAPMixture | None = None, return_values: bool = False) -> float | None:
+def similarity_test(data: dict[str, torch.Tensor], cfg: Config, model: UMAPMixture | None = None, return_values: bool = False) -> float | None:
     """Compute average cosine similarity between cross-modal embeddings.
 
     Measures alignment quality by computing pairwise cosine similarities between
@@ -37,7 +37,7 @@ def similarity_test(data: list[torch.Tensor], cfg: Config, model: UMAPMixture | 
     if return_values:
         return result
 
-def knn_test(data: list[torch.Tensor], cfg: Config, k: int = 5, model: UMAPMixture | None = None, return_values: bool = False) -> float | None:
+def knn_test(data: dict[str, torch.Tensor], cfg: Config, k: int = 5, model: UMAPMixture | None = None, return_values: bool = False) -> float | None:
     """Evaluate cross-modal retrieval accuracy using k-nearest neighbors.
 
     For each sample, checks if the corresponding sample in the other modality
