@@ -417,7 +417,7 @@ class UMAPMixture:
                 elif mode == "invert":
                     ref_embed = self.data[data_indices[i]] if data_indices is not None else self.data[i]
 
-                count = embed.size(0) if mode == "fit" else max(embed.size(0), ref_embed.size(0))
+                count = embed.size(0)
                 batch_losses = []
 
                 for j in range(0, count, batch_size):
@@ -440,7 +440,8 @@ class UMAPMixture:
 
                     num_pairs = i_idx_attr.size(0)
                     i_idx_rep = i_idx_attr.repeat_interleave(num_rep)
-                    l_idx_rep = torch.randint(0, count, (num_pairs, num_rep)).flatten().to(device)
+                    rep_count = ref_embed.size(0) if ref_embed is not None else count
+                    l_idx_rep = torch.randint(0, rep_count, (num_pairs, num_rep)).flatten().to(device)
 
                     if mode == "invert":
                         loss_rep = self._inv_rep_loss(embed, i_idx_rep, l_idx_rep, ref_embed, self.encoders[i].sigmas, self.encoders[i].rhos)
@@ -470,9 +471,9 @@ class UMAPMixture:
 
                 loss += sum(infonce_losses)
 
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            optimizer.zero_grad()
 
             if epoch % 10 == 0 or epoch == epochs - 1:
                 pbar.set_description(desc=f"{desc} (loss: {loss.item():.4f})")
