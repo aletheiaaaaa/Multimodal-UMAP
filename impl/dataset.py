@@ -36,6 +36,7 @@ def load_data(split: str) -> dict:
     image_transform = transforms.Compose([
         transforms.Resize((64, 64)),
         transforms.CenterCrop(64),
+        transforms.Grayscale(num_output_channels=1), # Comment out if you want to use RGB images instead of grayscale
         transforms.ToTensor(),
     ])
 
