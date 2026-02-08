@@ -22,6 +22,9 @@ def load_data(split: str) -> dict:
     if os.path.exists(f"data/{split}_data.pt"):
         return torch.load(f"data/{split}_data.pt", map_location="cpu")
 
+    if not os.path.exists("data"):
+        os.makedirs("data")
+
     data = load_dataset("AnyModal/flickr30k", split=split, streaming=True)
     batches = data.batch(batch_size=128)
 
@@ -57,8 +60,6 @@ def load_data(split: str) -> dict:
         "images": torch.cat(images, dim=0)
     }
 
-    if not os.path.exists("data"):
-        os.makedirs("data")
     torch.save(data_dict, f"data/{split}_data.pt")
 
     return data_dict
