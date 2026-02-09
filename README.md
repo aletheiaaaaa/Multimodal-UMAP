@@ -15,7 +15,7 @@ Then run `main.py` to train the model on flickr30k and evaluate the the results 
 ## Files
 
 - `impl/model.py` - Contains a basic UMAP implementation alongside a cross-modal extension
-- `impl/dataset.py` - Loads in flickr30k and preprocesses captions using BERT and images using SD-VAE respectively
+- `impl/dataset.py` - Loads in flickr30k and preprocesses captions using BERT and images using SD-VAE
 - `impl/util.py` - Contains wrapper functions for training and "inference"
 - `impl/validation.py` - Contains implementations of kNN and cosine similarity metrics
 - `impl/crossmodal.py` - Attempts to reconstruct images from captions using the cross-modal UMAP representation
