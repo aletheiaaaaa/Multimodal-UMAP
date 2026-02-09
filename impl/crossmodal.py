@@ -1,6 +1,7 @@
 import torch
 import os
 from matplotlib import pyplot as plt
+from diffusers import AutoencoderKL
 
 from .model import UMAPMixture, device
 from .util import Config, embed_and_recon
@@ -8,8 +9,8 @@ from .util import Config, embed_and_recon
 def crossmodal_recon(data: list[torch.Tensor], cfg: Config, model: UMAPMixture | None = None) -> list[torch.Tensor]:
     """Perform text-to-image cross-modal reconstruction and visualize results.
 
-    Embeds text features, reconstructs to image pixel space, and saves
-    comparison images to results/ directory.
+    Embeds text features, reconstructs to image latent space, decodes using
+    Stable Diffusion VAE, and saves comparison images to results/ directory.
 
     Args:
         data: List of [text_tensor, image_tensor] for reconstruction.
@@ -17,15 +18,24 @@ def crossmodal_recon(data: list[torch.Tensor], cfg: Config, model: UMAPMixture |
         model: Trained UMAPMixture model.
 
     Returns:
-        List of reconstructed image tensors.
+        List of reconstructed image latent tensors.
     """
     recon = embed_and_recon(model, [data[0]], [0], [1], cfg)[0]
 
     loss = torch.mean((recon - data[1]).pow(2)).item()
     print(f"Reconstruction loss from text to image: {loss:.4f}")
 
-    recon_images = recon.view(-1, 3, 64, 64).clamp(0, 1).cpu()
-    orig_images = data[1].view(-1, 3, 64, 64).clamp(0, 1).cpu()
+    autoencoder = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse").to(device)
+
+    recon_latent = recon.view(-1, 4, 32, 32).to(device)
+    orig_latent = data[1].view(-1, 4, 32, 32).to(device)
+
+    with torch.no_grad():
+        recon_images = autoencoder.decode(recon_latent).sample
+        orig_images = autoencoder.decode(orig_latent).sample
+
+    recon_images = (recon_images / 2 + 0.5).clamp(0, 1).cpu()
+    orig_images = (orig_images / 2 + 0.5).clamp(0, 1).cpu()
 
     if not os.path.exists("results"):
         os.makedirs("results")
