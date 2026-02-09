@@ -1,6 +1,5 @@
 import torch
 import argparse
-import os
 
 from impl.validation import similarity_test, knn_test
 from impl.crossmodal import crossmodal_recon
