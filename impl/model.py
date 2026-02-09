@@ -478,6 +478,12 @@ class UMAPMixture:
             if epoch % 10 == 0 or epoch == epochs - 1:
                 pbar.set_description(desc=f"{desc} (loss: {loss.item():.4f})")
 
+        if mode == "transform" and len(embeds) >= 2:
+            e0 = F.normalize(embeds[0].detach(), dim=1)
+            e1 = F.normalize(embeds[1].detach(), dim=1)
+            final_cossim = (e0 * e1).sum(dim=1).mean().item()
+            print(f"[diag] final cossim (after optimization): {final_cossim:.4f}")
+
         return embeds
 
     def fit(self, inputs: list[torch.Tensor], epochs: int, num_rep: int = 8, lr: float = 0.2, alpha: float = 0.5, batch_size: int = 512) -> torch.Tensor | None:
@@ -540,6 +546,23 @@ class UMAPMixture:
             List of embedding tensors.
         """
         graphs, embeds = self.init(inputs, mode="transform", data_indices=data_indices)
+
+        # Diagnostics
+        if len(embeds) >= 2:
+            e0 = F.normalize(embeds[0], dim=1)
+            e1 = F.normalize(embeds[1], dim=1)
+            init_cossim = (e0 * e1).sum(dim=1).mean().item()
+            print(f"[diag] init cossim (before optimization): {init_cossim:.4f}")
+
+            g0, g1 = graphs[0], graphs[1]
+            n0 = set()
+            for r, c in zip(g0.indices()[0].tolist(), g0.indices()[1].tolist()):
+                n0.add((r, c))
+            n1 = set()
+            for r, c in zip(g1.indices()[0].tolist(), g1.indices()[1].tolist()):
+                n1.add((r, c))
+            overlap = len(n0 & n1) / max(len(n0 | n1), 1)
+            print(f"[diag] neighbor overlap between modalities: {overlap:.4f}")
 
         return self._train(
             embeds,
