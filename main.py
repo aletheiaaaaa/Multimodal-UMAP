@@ -19,7 +19,7 @@ def init_parser() -> argparse.Namespace:
     parser.add_argument("--num_rep", type=int, default=8, help="Number of repulsive points for UMAP")
     parser.add_argument("--lr", type=float, default=0.01, help="Learning rate")
     parser.add_argument("--alpha", type=float, default=1.0, help="Cross-modal alignment weight")
-    parser.add_argument("--batch_size", type=int, default=512, help="Batch size")
+    parser.add_argument("--batch_size", type=int, default=256, help="Batch size")
     parser.add_argument("--log_dir", type=str, default=None, help="Directory to log training losses")
 
     parser.add_argument("--test_epochs", type=int, default=120, help="Number of testing epochs")
