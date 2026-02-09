@@ -4,7 +4,7 @@ import os
 
 from impl.validation import similarity_test, knn_test
 from impl.crossmodal import crossmodal_recon
-from impl.util import Config, train
+from impl.util import Config, train, embed_and_plot
 from impl.dataset import load_data
 from impl.model import UMAPMixture
 
@@ -12,7 +12,7 @@ def init_parser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Cross-modal UMAP Mixture Model Experiments")
 
     parser.add_argument("--k_neighbors", type=int, default=15, help="Number of neighbors for UMAP")
-    parser.add_argument("--out_dim", type=int, default=64, help="Output embedding dimension")
+    parser.add_argument("--out_dim", type=int, default=2, help="Output embedding dimension")
     parser.add_argument("--min_dist", type=float, default=0.1, help="Minimum distance for UMAP")
 
     parser.add_argument("--train_epochs", type=int, default=600, help="Number of training epochs")
@@ -60,6 +60,8 @@ if __name__ == "__main__":
 
     similarity_test(test_split, cfg, model=model)
     knn_test(test_split, cfg, k=args.k_test, model=model)
+
+    embed_and_plot(test_split, cfg, model=model)
 
     if args.crossmodal == "yes":
         indices = torch.randperm(test_split["texts"].shape[0])[:16]
