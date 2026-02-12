@@ -376,7 +376,7 @@ class UMAPMixture:
         loss = -torch.log(1 - weight + 1e-6).mean()
         return loss
 
-    def _infonce_loss(self, embeds_0: torch.Tensor, embeds_1: torch.Tensor, n_neg: int = 8, temperature: float = 0.5) -> torch.Tensor:
+    def _infonce_loss(self, embeds_0: torch.Tensor, embeds_1: torch.Tensor, n_neg: int = 256, temperature: float = 0.1) -> torch.Tensor:
         num_samples = min(embeds_0.size(0), embeds_1.size(0))
         if num_samples == 0:
             return torch.tensor(0.0, requires_grad=True).to(device)
