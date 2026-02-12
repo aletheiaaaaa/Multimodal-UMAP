@@ -376,7 +376,7 @@ class UMAPMixture:
         loss = -torch.log(1 - weight + 1e-6).mean()
         return loss
 
-    def _infonce_loss(self, embeds_0: torch.Tensor, embeds_1: torch.Tensor, n_neg: int = 256, temperature: float = 0.1) -> torch.Tensor:
+    def _infonce_loss(self, embeds_0: torch.Tensor, embeds_1: torch.Tensor, n_neg: int = 128, temperature: float = 0.1) -> torch.Tensor:
         num_samples = min(embeds_0.size(0), embeds_1.size(0))
         if num_samples == 0:
             return torch.tensor(0.0, requires_grad=True).to(device)
@@ -419,7 +419,7 @@ class UMAPMixture:
 
         pbar = tqdm(range(epochs), desc=desc)
         for epoch in pbar:
-            umap_losses = []
+            embed_losses = []
             n_modes = len(embeds) if data_indices is None else len(data_indices)
 
             # Compute UMAP loss for each modality
@@ -465,26 +465,26 @@ class UMAPMixture:
 
                     batch_losses.append(loss_attr + loss_rep)
 
-                umap_loss = torch.stack(batch_losses).mean()
-                umap_losses.append(umap_loss)
+                embed_loss = torch.stack(batch_losses).mean()
+                embed_losses.append(embed_loss)
 
-            loss = sum(umap_losses)
+            loss = sum(embed_losses)
 
             # Compute InfoNCE losses between modalities for cross-modal alignment
             if mode == "fit":
                 num_embeds = len(embeds)
-                infonce_losses = [torch.tensor(0.0, requires_grad=True).to(device) for _ in range(num_embeds)]
+                align_losses = [torch.tensor(0.0, requires_grad=True).to(device) for _ in range(num_embeds)]
 
                 for i in range(num_embeds):
                     for j in range(i + 1, num_embeds):
-                        infonce_ij = self._infonce_loss(embeds[i], embeds[j])
-                        infonce_ji = self._infonce_loss(embeds[j], embeds[i])
-                        infonce_loss = (infonce_ij + infonce_ji) / 2.0
+                        align_ij = self._infonce_loss(embeds[i], embeds[j], n_neg=batch_size)
+                        align_ji = self._infonce_loss(embeds[j], embeds[i], n_neg=batch_size)
+                        align_loss = (align_ij + align_ji) / 2
 
-                        infonce_losses[i] = infonce_losses[i] + alpha * infonce_loss
-                        infonce_losses[j] = infonce_losses[j] + alpha * infonce_loss
+                        align_losses[i] = align_losses[i] + alpha * align_loss
+                        align_losses[j] = align_losses[j] + alpha * align_loss
 
-                loss += sum(infonce_losses)
+                loss += sum(align_losses)
 
             optimizer.zero_grad()
             loss.backward()
