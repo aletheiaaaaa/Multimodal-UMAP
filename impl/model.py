@@ -532,6 +532,12 @@ class UMAPMixture:
             desc=f"Training {self.num_encoders} encoders",
         )
 
+        if len(self.embeds) >= 2:
+            e0 = F.normalize(self.embeds[0].detach(), dim=1)
+            e1 = F.normalize(self.embeds[1].detach(), dim=1)
+            print(f"[diag] fit training embed cossim: {(e0 * e1).sum(dim=1).mean().item():.4f}")
+            print(f"[diag] fit embed norms: mod0={self.embeds[0].detach().norm(dim=1).mean().item():.4f}, mod1={self.embeds[1].detach().norm(dim=1).mean().item():.4f}")
+
     def fit_transform(self, inputs: list[torch.Tensor], epochs: int, num_rep: int = 8, lr: float = 0.2, alpha: float = 0.5, batch_size: int = 512) -> torch.Tensor:
         """Fit the model and return training embeddings.
 
