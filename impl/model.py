@@ -549,20 +549,64 @@ class UMAPMixture:
 
         # Diagnostics
         if len(embeds) >= 2:
+            ei = data_indices if data_indices is not None else list(range(len(embeds)))
+            g0, g1 = graphs[0], graphs[1]
+            Q = embeds[0].size(0)
+            train_data_0 = self.data[ei[0]]
+            train_data_1 = self.data[ei[1]]
+
+            idx0 = g0.indices()
+            idx1 = g1.indices()
+            neighbors_0 = [[] for _ in range(Q)]
+            for r, c in zip(idx0[0].tolist(), idx0[1].tolist()):
+                neighbors_0[r].append(c)
+            neighbors_1 = [[] for _ in range(Q)]
+            for r, c in zip(idx1[0].tolist(), idx1[1].tolist()):
+                neighbors_1[r].append(c)
+
+            cross_cossim_0to1 = []
+            cross_cossim_1to0 = []
+            for i in range(Q):
+                n0 = neighbors_0[i]
+                n1 = neighbors_1[i]
+                if n0:
+                    neighbor_data_in_mod1 = F.normalize(train_data_1[n0], dim=1)
+                    test_i_mod1 = F.normalize(inputs[1][i:i+1].to(device), dim=1)
+                    cross_cossim_0to1.append((neighbor_data_in_mod1 @ test_i_mod1.T).mean().item())
+                if n1:
+                    neighbor_data_in_mod0 = F.normalize(train_data_0[n1], dim=1)
+                    test_i_mod0 = F.normalize(inputs[0][i:i+1].to(device), dim=1)
+                    cross_cossim_1to0.append((neighbor_data_in_mod0 @ test_i_mod0.T).mean().item())
+
+            same_cossim_0 = []
+            same_cossim_1 = []
+            for i in range(Q):
+                n0 = neighbors_0[i]
+                n1 = neighbors_1[i]
+                if n0:
+                    neighbor_data = F.normalize(train_data_0[n0], dim=1)
+                    test_i = F.normalize(inputs[0][i:i+1].to(device), dim=1)
+                    same_cossim_0.append((neighbor_data @ test_i.T).mean().item())
+                if n1:
+                    neighbor_data = F.normalize(train_data_1[n1], dim=1)
+                    test_i = F.normalize(inputs[1][i:i+1].to(device), dim=1)
+                    same_cossim_1.append((neighbor_data @ test_i.T).mean().item())
+
+            rand_idx = torch.randint(0, train_data_0.size(0), (Q, self.k_neighbors))
+            rand_cossim_0to1 = []
+            for i in range(Q):
+                ri = rand_idx[i].tolist()
+                rand_data = F.normalize(train_data_1[ri], dim=1)
+                test_i = F.normalize(inputs[1][i:i+1].to(device), dim=1)
+                rand_cossim_0to1.append((rand_data @ test_i.T).mean().item())
+
+            print(f"[diag] same-modality kNN cossim (sanity check): mod0={torch.tensor(same_cossim_0).mean():.4f}, mod1={torch.tensor(same_cossim_1).mean():.4f}")
+            print(f"[diag] cross-modality kNN cossim: mod0_neighbors_in_mod1={torch.tensor(cross_cossim_0to1).mean():.4f}, mod1_neighbors_in_mod0={torch.tensor(cross_cossim_1to0).mean():.4f}")
+            print(f"[diag] random baseline cross cossim: {torch.tensor(rand_cossim_0to1).mean():.4f}")
+
             e0 = F.normalize(embeds[0], dim=1)
             e1 = F.normalize(embeds[1], dim=1)
-            init_cossim = (e0 * e1).sum(dim=1).mean().item()
-            print(f"[diag] init cossim (before optimization): {init_cossim:.4f}")
-
-            g0, g1 = graphs[0], graphs[1]
-            n0 = set()
-            for r, c in zip(g0.indices()[0].tolist(), g0.indices()[1].tolist()):
-                n0.add((r, c))
-            n1 = set()
-            for r, c in zip(g1.indices()[0].tolist(), g1.indices()[1].tolist()):
-                n1.add((r, c))
-            overlap = len(n0 & n1) / max(len(n0 | n1), 1)
-            print(f"[diag] neighbor overlap between modalities: {overlap:.4f}")
+            print(f"[diag] init embed cossim: {(e0 * e1).sum(dim=1).mean().item():.4f}")
 
         return self._train(
             embeds,
