@@ -642,7 +642,7 @@ class UMAPMixture:
             graphs,
             epochs,
             num_rep,
-            lr,
+            0.1 * lr,
             alpha,
             batch_size,
             mode="transform",
