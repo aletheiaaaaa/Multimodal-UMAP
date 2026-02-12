@@ -60,7 +60,7 @@ class UMAPEncoder:
 
         return sigmas.detach()
 
-    def fuzzy_knn_graph(self, inputs: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref_data: torch.Tensor | None = None, num_iters: int = 25, a: float | None = None, b: float | None = None) -> torch.Tensor:
+    def fuzzy_knn_graph(self, inputs: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref_data: torch.Tensor | None = None, num_iters: int = 10, a: float | None = None, b: float | None = None) -> torch.Tensor:
         """Build approximate kNN graph using NN-descent algorithm.
 
         Constructs a fuzzy simplicial set representation of the data manifold
@@ -281,7 +281,7 @@ class UMAPEncoder:
         Returns:
             Tuple of (adjacency graph, initial embeddings).
         """
-        graph = self.fuzzy_knn_graph(input, mode, query, ref_data, num_iters=25, a=a, b=b)
+        graph = self.fuzzy_knn_graph(input, mode, query, ref_data, num_iters=10, a=a, b=b)
         if mode == "fit":
             graph = (graph + graph.transpose(0, 1) - graph * graph.transpose(0, 1)).coalesce()
             embed = self.embed_all(graph)
@@ -375,6 +375,10 @@ class UMAPMixture:
 
         loss = -torch.log(1 - weight + 1e-6).mean()
         return loss
+
+    def _mse_loss(self, embeds_0: torch.Tensor, embeds_1: torch.Tensor) -> torch.Tensor:
+        n = min(embeds_0.size(0), embeds_1.size(0))
+        return (embeds_0[:n] - embeds_1[:n]).pow(2).sum(dim=1).mean()
 
     def _infonce_loss(self, embeds_0: torch.Tensor, embeds_1: torch.Tensor, n_neg: int = 128, temperature: float = 0.1) -> torch.Tensor:
         num_samples = min(embeds_0.size(0), embeds_1.size(0))
@@ -477,9 +481,7 @@ class UMAPMixture:
 
                 for i in range(num_embeds):
                     for j in range(i + 1, num_embeds):
-                        align_ij = self._infonce_loss(embeds[i], embeds[j], n_neg=batch_size)
-                        align_ji = self._infonce_loss(embeds[j], embeds[i], n_neg=batch_size)
-                        align_loss = (align_ij + align_ji) / 2
+                        align_loss = self._mse_loss(embeds[i], embeds[j])
 
                         align_losses[i] = align_losses[i] + alpha * align_loss
                         align_losses[j] = align_losses[j] + alpha * align_loss
