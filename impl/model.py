@@ -281,7 +281,7 @@ class UMAPEncoder:
         Returns:
             Tuple of (adjacency graph, initial embeddings).
         """
-        graph = self.fuzzy_knn_graph(input, mode, query, ref_data, num_iters=10, a=a, b=b)
+        graph = self.fuzzy_knn_graph(input, mode, query, ref_data, num_iters=25, a=a, b=b)
         if mode == "fit":
             graph = (graph + graph.transpose(0, 1) - graph * graph.transpose(0, 1)).coalesce()
             embed = self.embed_all(graph)
