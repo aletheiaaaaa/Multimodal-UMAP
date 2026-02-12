@@ -85,19 +85,134 @@ class UMAPEncoder:
         N = inputs.size(0)
         Q = query.size(0) if query is not None else N
 
-        inputs_np = inputs.cpu().numpy()
-
-        if query is None:
-            index = NNDescent(inputs_np, n_neighbors=self.k_neighbors, metric="euclidean")
-            indices_np, dists_np = index.neighbor_graph
-        else:
-            query_np = query.cpu().numpy()
-            index = NNDescent(inputs_np, n_neighbors=self.k_neighbors, metric="euclidean")
-            indices_np, dists_np = index.query(query_np, k=self.k_neighbors)
-
-        cols = torch.from_numpy(indices_np.flatten()).long().to(device)
         rows = torch.arange(Q).repeat_interleave(self.k_neighbors).to(device)
-        dists = torch.from_numpy(dists_np).float().to(device)
+        cols = torch.randint(0, N, (Q * self.k_neighbors,)).to(device)
+
+        if ref_data is None:
+            mask0 = cols != rows
+            rows = rows[mask0]
+            cols = cols[mask0]
+
+        edges = rows * N + cols
+        unique = torch.unique(edges)
+        rows = unique // N
+        cols = unique % N
+
+        ones = torch.ones(rows.size(0)).to(device)
+
+        # Batch distance computation to save memory
+        num_edges = rows.size(0)
+        edge_batch_size = 2000 if N > 15000 else 20000
+        dists_list = []
+
+        for i in range(0, num_edges, edge_batch_size):
+            end = min(i + edge_batch_size, num_edges)
+            batch_rows = rows[i:end]
+            batch_cols = cols[i:end]
+
+            batch_dists = LA.vector_norm(inputs[batch_rows] - inputs[batch_cols], dim=1) if ref_data is None else LA.vector_norm(query[batch_rows] - inputs[batch_cols], dim=1)
+
+            dists_list.append(batch_dists)
+
+        dists = torch.cat(dists_list)
+
+        for _ in tqdm(range(num_iters), desc=f"Building graph {self.id}"):
+            adj = torch.sparse_coo_tensor(torch.stack([rows, cols], dim=0), ones, (Q, N)).coalesce()
+            if ref_data is None:
+                adj = (adj + adj.transpose(0, 1)).coalesce()
+
+            # Batch the matrix multiplication to reduce memory usage
+            batch_size = 2000 if N > 15000 else 5000
+            all_cand_rows = []
+            all_cand_cols = []
+            all_cand_vals = []
+
+            for start in range(0, Q, batch_size):
+                end = min(start + batch_size, Q)
+
+                batch_mask = (adj.indices()[0] >= start) & (adj.indices()[0] < end)
+                if batch_mask.sum() == 0:
+                    continue
+
+                batch_indices = adj.indices()[:, batch_mask].clone()
+                batch_values = adj.values()[batch_mask]
+                # Offset row indices to batch
+                batch_indices[0] -= start
+                batch_adj = torch.sparse_coo_tensor(batch_indices, batch_values, (end - start, N))
+
+                batch_cand = torch.sparse.mm(batch_adj, adj).coalesce() if ref_data is None else torch.sparse.mm(batch_adj, ref_data).coalesce()
+
+                # Offset row indices back to global
+                batch_cand_indices = batch_cand.indices()
+                batch_cand_indices[0] += start
+
+                all_cand_rows.append(batch_cand_indices[0])
+                all_cand_cols.append(batch_cand_indices[1])
+                all_cand_vals.append(batch_cand.values())
+
+            candidates = torch.sparse_coo_tensor(
+                torch.stack([torch.cat(all_cand_rows), torch.cat(all_cand_cols)]),
+                torch.cat(all_cand_vals),
+                (Q, N)
+            ).coalesce()
+
+            # Cap max candidates to save memory
+            if candidates.values().size(0) > 50000:
+                idx = torch.randperm(candidates._nnz())[:50000]
+                indices = candidates.indices()[:, idx]
+                values = candidates.values()[idx]
+                candidates = torch.sparse_coo_tensor(indices, values, candidates.shape).coalesce()
+
+            cand_rows, cand_cols = candidates.indices()
+            cand_dists = LA.vector_norm(inputs[cand_rows] - inputs[cand_cols], dim=1) if ref_data is None else LA.vector_norm(query[cand_rows] - inputs[cand_cols], dim=1)
+
+            if ref_data is None:
+                mask1 = cand_rows != cand_cols
+
+            existing_edges = rows * N + cols
+            candidate_edges = cand_rows * N + cand_cols
+            is_new = ~torch.isin(candidate_edges, existing_edges)
+            
+            mask1 = mask1 & is_new if ref_data is None else is_new
+            cand_rows = cand_rows[mask1]
+            cand_cols = cand_cols[mask1]
+            cand_dists = cand_dists[mask1]
+
+            all_rows = torch.cat([rows, cand_rows], dim=0)
+            all_cols = torch.cat([cols, cand_cols], dim=0)
+            all_dists = torch.cat([dists, cand_dists], dim=0)
+
+            idx = torch.argsort(all_dists, stable=True)
+            idx = idx[torch.argsort(all_rows[idx], stable=True)]
+            all_rows = all_rows[idx]
+            all_cols = all_cols[idx]
+            all_dists = all_dists[idx]
+
+            counts = torch.bincount(all_rows, minlength=Q)
+            positions = (torch.arange(all_rows.size(0), device=device) - torch.repeat_interleave(torch.cat([torch.tensor([0], device=device), counts.cumsum(0)[:-1]]), counts))
+
+            mask2 = positions < self.k_neighbors
+            rows = all_rows[mask2]
+            cols = all_cols[mask2]
+            dists = all_dists[mask2]
+
+            counts = torch.bincount(rows, minlength=Q)
+            deficit = (self.k_neighbors - counts).clamp(min=0)
+
+            if deficit.sum().item() > 0:
+                fill_rows = torch.arange(Q, device=device).repeat_interleave(deficit)
+                fill_cols = torch.randint(0, N, (deficit.sum().item(),), device=device)
+                if ref_data is None:
+                    fill_cols = torch.where(fill_cols == fill_rows, (fill_cols + 1) % N, fill_cols)
+
+                fill_dists = LA.vector_norm((query[fill_rows] if ref_data is not None else inputs[fill_rows]) - inputs[fill_cols], dim=1)
+
+                rows = torch.cat([rows, fill_rows])
+                cols = torch.cat([cols, fill_cols])
+                dists = torch.cat([dists, fill_dists])
+
+            ones = torch.ones(rows.size(0)).to(device)
+
         dists = dists.view(Q, self.k_neighbors)
         if mode != "invert":
             min_dists = dists.min(dim=1).values.unsqueeze(1)
@@ -148,12 +263,8 @@ class UMAPEncoder:
         Returns:
             Query embeddings as weighted combination of reference embeddings.
         """
-        row_sums = query.sum(dim=1).to_dense().clamp(min=1e-6)
-        indices = query.indices()
-        values = query.values() / row_sums[indices[0]]
-        normalized = torch.sparse_coo_tensor(indices, values, query.shape).coalesce()
-
-        return sp.mm(normalized, ref)
+        nearest = query.to_dense().argmax(dim=1)
+        return ref[nearest]
 
     def init(self, input: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref_data: torch.Tensor | None = None, ref_embeds: torch.Tensor | None = None, a: float | None = None, b: float | None = None) -> tuple[torch.Tensor, torch.Tensor]:
         """Initialize graph and embeddings for a single modality.
@@ -473,7 +584,7 @@ class UMAPMixture:
             graphs,
             epochs,
             num_rep,
-            lr,
+            0.05 * lr,
             alpha,
             batch_size,
             mode="transform",
