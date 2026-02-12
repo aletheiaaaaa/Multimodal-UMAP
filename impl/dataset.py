@@ -1,9 +1,7 @@
 import torch
 import os
-from torchvision import transforms
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModel
-from diffusers import AutoencoderKL
+from transformers import AutoTokenizer, AutoModel, ViTModel, ViTImageProcessor
 from tqdm import tqdm
 
 def load_data(split: str) -> dict:
@@ -32,13 +30,8 @@ def load_data(split: str) -> dict:
     text_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
     text_model = AutoModel.from_pretrained("google-bert/bert-base-uncased").to(device)
 
-    image_transform = transforms.Compose([
-        transforms.Resize((256, 256)),
-        transforms.CenterCrop(256),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-    ])
-    image_model = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse").to(device)
+    image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224")
+    image_model = ViTModel.from_pretrained("google/vit-base-patch16-224").to(device)
 
     texts = []
     images = []
@@ -52,10 +45,10 @@ def load_data(split: str) -> dict:
             text_features = text_model(**encoded_input).pooler_output
         texts.append(text_features)
 
-        processed_images = torch.stack([image_transform(img) for img in image_list]).to(device)
+        processed_images = image_processor(images=image_list, return_tensors="pt").to(device)
         with torch.no_grad():
-            image_features = image_model.encode(processed_images).latent_dist.mean
-        images.append(image_features.flatten(start_dim=1))
+            image_features = image_model(**processed_images).last_hidden_state[:, 0]
+        images.append(image_features)
 
     data_dict = {
         "texts": torch.cat(texts, dim=0),
