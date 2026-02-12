@@ -493,7 +493,9 @@ class UMAPMixture:
             optimizer.step()
 
             if epoch % 10 == 0 or epoch == epochs - 1:
-                pbar.set_description(desc=f"{desc} (loss: {loss.item():.4f})")
+                umap_total = sum(embed_losses).item()
+                align_total = (loss.item() - umap_total) if mode == "fit" else 0.0
+                pbar.set_description(desc=f"{desc} (umap: {umap_total:.4f}, align: {align_total:.4f})")
 
         if mode == "transform" and len(embeds) >= 2:
             e0 = F.normalize(embeds[0].detach(), dim=1)
