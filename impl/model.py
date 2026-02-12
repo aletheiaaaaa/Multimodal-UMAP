@@ -60,7 +60,7 @@ class UMAPEncoder:
 
         return sigmas.detach()
 
-    def fuzzy_knn_graph(self, inputs: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref_data: torch.Tensor | None = None, num_iters: int = 10, a: float | None = None, b: float | None = None) -> torch.Tensor:
+    def fuzzy_knn_graph(self, inputs: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref_data: torch.Tensor | None = None, num_iters: int = 25, a: float | None = None, b: float | None = None) -> torch.Tensor:
         """Build approximate kNN graph using NN-descent algorithm.
 
         Constructs a fuzzy simplicial set representation of the data manifold
