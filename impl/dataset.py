@@ -1,7 +1,7 @@
 import torch
 import os
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModel, ViTModel, ViTImageProcessor
+from transformers import AutoTokenizer, AutoModel, AutoImageProcessor
 from tqdm import tqdm
 
 def load_data(split: str) -> dict:
@@ -30,8 +30,8 @@ def load_data(split: str) -> dict:
     text_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
     text_model = AutoModel.from_pretrained("google-bert/bert-base-uncased").to(device)
 
-    image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224")
-    image_model = ViTModel.from_pretrained("google/vit-base-patch16-224").to(device)
+    image_processor = AutoImageProcessor.from_pretrained("facebook/dinov2-base")
+    image_model = AutoModel.from_pretrained("facebook/dinov2-base").to(device)
 
     texts = []
     images = []
