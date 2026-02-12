@@ -94,7 +94,7 @@ class UMAPEncoder:
         rows = unique // N
         cols = unique % N
 
-        ones = torch.ones((mask0.size(0),)).to(device)
+        ones = torch.ones(rows.size(0)).to(device)
 
         # Batch distance computation to save memory
         num_edges = rows.size(0)
