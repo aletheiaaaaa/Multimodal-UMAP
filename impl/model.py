@@ -263,8 +263,14 @@ class UMAPEncoder:
         Returns:
             Query embeddings as weighted combination of reference embeddings.
         """
-        nearest = query.to_dense().argmax(dim=1)
-        return ref[nearest]
+        row_sums = query.sum(dim=1).to_dense().clamp(min=1e-6)
+        indices = query.indices()
+        values = query.values() / row_sums[indices[0]]
+        nearest = query.indices()[1][torch.searchsorted(query.indices()[0], torch.arange(query.size(0)).to(device))]
+        normalized = torch.sparse_coo_tensor(indices, values, query.shape).coalesce()
+
+        return torch.where(values == 1, ref[nearest], sp.mm(normalized, ref))
+
 
     def init(self, input: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref_data: torch.Tensor | None = None, ref_embeds: torch.Tensor | None = None, a: float | None = None, b: float | None = None) -> tuple[torch.Tensor, torch.Tensor]:
         """Initialize graph and embeddings for a single modality.
