@@ -197,7 +197,10 @@ class UMAPEncoder:
 
             if deficit.sum().item() > 0:
                 fill_rows = torch.arange(Q, device=device).repeat_interleave(deficit)
-                fill_cols = torch.where(fill_cols == fill_rows, (fill_cols + 1) % N, fill_cols) if ref_data is None else torch.randint(0, N, (deficit.sum().item(),), device=device)
+                fill_cols = torch.randint(0, N, (deficit.sum().item(),), device=device)
+                if ref_data is None:
+                    fill_cols = torch.where(fill_cols == fill_rows, (fill_cols + 1) % N, fill_cols)
+
                 fill_dists = LA.vector_norm((query[fill_rows] if ref_data is not None else inputs[fill_rows]) - inputs[fill_cols], dim=1)
 
                 rows = torch.cat([rows, fill_rows])
