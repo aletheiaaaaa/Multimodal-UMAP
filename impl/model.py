@@ -330,8 +330,8 @@ class UMAPMixture:
         if i_idx.size(0) == 0:
             return torch.tensor(0.0, requires_grad=True).to(device)
 
-        embeds_i = F.normalize(embeds[i_idx], dim=1)
-        embeds_j = F.normalize(ref[j_idx] if ref is not None else embeds[j_idx], dim=1)
+        embeds_i = embeds[i_idx]
+        embeds_j = ref[j_idx] if ref is not None else embeds[j_idx]
 
         dist = ((embeds_i - embeds_j).pow(2)).sum(dim=1).clamp(min=1e-6)
 
@@ -342,8 +342,8 @@ class UMAPMixture:
         if i_idx.size(0) == 0:
             return torch.tensor(0.0, requires_grad=True).to(device)
 
-        embeds_i = F.normalize(embeds[i_idx], dim=1)
-        embeds_j = F.normalize(ref[j_idx] if ref is not None else embeds[j_idx], dim=1)
+        embeds_i = embeds[i_idx]
+        embeds_j = ref[j_idx] if ref is not None else embeds[j_idx]
 
         dist = ((embeds_i - embeds_j).pow(2)).sum(dim=1).clamp(min=1e-6)
 
