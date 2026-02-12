@@ -422,7 +422,7 @@ class UMAPMixture:
                 ref.requires_grad = False
 
         optimizer = optim.Adam(embeds, lr=lr)
-        scheduler = LinearLR(optimizer, start_factor=1.0, end_factor=0.01, total_iters=epochs)
+        # scheduler = LinearLR(optimizer, start_factor=1.0, end_factor=0.01, total_iters=epochs)
 
         pbar = tqdm(range(epochs), desc=desc)
         for epoch in pbar:
