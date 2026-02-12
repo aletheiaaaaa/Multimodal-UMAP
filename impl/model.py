@@ -267,7 +267,7 @@ class UMAPEncoder:
         inv = torch.where(row_sums > 0, 1.0 / row_sums, 0.0)
 
         D_inv = torch.sparse_coo_tensor(
-            torch.stack([torch.arange(query.size(0)), torch.arange(query.size(0))]),
+            torch.stack([torch.arange(query.size(0)), torch.arange(query.size(0))]).to(device),
             inv,
             query.shape
         )
