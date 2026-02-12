@@ -85,16 +85,16 @@ class UMAPEncoder:
         cols = torch.randint(0, N, (Q * self.k_neighbors,)).to(device)
 
         if ref_data is None:
-            mask = cols != rows
-            rows = rows[mask]
-            cols = cols[mask]
+            mask0 = cols != rows
+            rows = rows[mask0]
+            cols = cols[mask0]
 
         edges = rows * N + cols
-        mask = torch.unique(edges)
-        rows = mask // N
-        cols = mask % N
+        unique = torch.unique(edges)
+        rows = unique // N
+        cols = unique % N
 
-        ones = torch.ones((mask.size(0),)).to(device)
+        ones = torch.ones((mask0.size(0),)).to(device)
 
         # Batch distance computation to save memory
         num_edges = rows.size(0)
@@ -153,7 +153,7 @@ class UMAPEncoder:
             ).coalesce()
 
             # Cap max candidates to save memory
-            if candidates._nnz() > 50000:
+            if candidates.values().size(0) > 50000:
                 idx = torch.randperm(candidates._nnz())[:50000]
                 indices = candidates.indices()[:, idx]
                 values = candidates.values()[idx]
@@ -163,16 +163,16 @@ class UMAPEncoder:
             cand_dists = LA.vector_norm(inputs[cand_rows] - inputs[cand_cols], dim=1) if ref_data is None else LA.vector_norm(query[cand_rows] - inputs[cand_cols], dim=1)
 
             if ref_data is None:
-                mask = cand_rows != cand_cols
+                mask1 = cand_rows != cand_cols
 
             existing_edges = rows * N + cols
             candidate_edges = cand_rows * N + cand_cols
             is_new = ~torch.isin(candidate_edges, existing_edges)
             
-            mask = mask & is_new if ref_data is None else is_new
-            cand_rows = cand_rows[mask]
-            cand_cols = cand_cols[mask]
-            cand_dists = cand_dists[mask]
+            mask1 = mask1 & is_new if ref_data is None else is_new
+            cand_rows = cand_rows[mask1]
+            cand_cols = cand_cols[mask1]
+            cand_dists = cand_dists[mask1]
 
             all_rows = torch.cat([rows, cand_rows], dim=0)
             all_cols = torch.cat([cols, cand_cols], dim=0)
@@ -187,16 +187,28 @@ class UMAPEncoder:
             counts = torch.bincount(all_rows, minlength=Q)
             positions = (torch.arange(all_rows.size(0), device=device) - torch.repeat_interleave(torch.cat([torch.tensor([0], device=device), counts.cumsum(0)[:-1]]), counts))
 
-            mask = positions < self.k_neighbors
-            rows = all_rows[mask]
-            cols = all_cols[mask]
-            dists = all_dists[mask]
+            mask2 = positions < self.k_neighbors
+            rows = all_rows[mask2]
+            cols = all_cols[mask2]
+            dists = all_dists[mask2]
+
+            counts = torch.bincount(rows, minlength=Q)
+            deficit = (self.k_neighbors - counts).clamp(min=0)
+
+            if deficit.sum().item() > 0:
+                fill_rows = torch.arange(Q, device=device).repeat_interleave(deficit)
+                fill_cols = torch.where(fill_cols == fill_rows, (fill_cols + 1) % N, fill_cols) if ref_data is None else torch.randint(0, N, (deficit.sum().item(),), device=device)
+                fill_dists = LA.vector_norm((query[fill_rows] if ref_data is not None else inputs[fill_rows]) - inputs[fill_cols], dim=1)
+
+                rows = torch.cat([rows, fill_rows])
+                cols = torch.cat([cols, fill_cols])
+                dists = torch.cat([dists, fill_dists])
 
             ones = torch.ones(rows.size(0)).to(device)
 
         dists = dists.view(Q, self.k_neighbors)
         if mode != "invert":
-            min_dists = dists.min(dim=1).values.unsqueeze(1).repeat(1, self.k_neighbors)
+            min_dists = dists.min(dim=1).values.unsqueeze(1)
             sigmas = self.get_sigmas(dists, min_dists)
             weights = torch.exp(- (dists - min_dists) / sigmas.unsqueeze(1)).flatten()
             if mode == "fit":
