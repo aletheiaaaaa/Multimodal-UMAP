@@ -268,7 +268,7 @@ class UMAPEncoder:
         values = query.values() / row_sums[indices[0]]
         normalized = torch.sparse_coo_tensor(indices, values, query.shape).coalesce()
 
-        return torch.where(query.values() == 1, ref, sp.mm(normalized, ref))
+        return sp.mm(normalized, ref)
 
 
     def init(self, input: torch.Tensor, mode: str = "fit", query: torch.Tensor | None = None, ref_data: torch.Tensor | None = None, ref_embeds: torch.Tensor | None = None, a: float | None = None, b: float | None = None) -> tuple[torch.Tensor, torch.Tensor]:
