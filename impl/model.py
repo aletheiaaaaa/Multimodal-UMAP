@@ -263,16 +263,11 @@ class UMAPEncoder:
         Returns:
             Query embeddings as weighted combination of reference embeddings.
         """
-        row_sums = sp.sum(query, dim=1).to_dense()
-        inv = torch.where(row_sums > 0, 1.0 / row_sums, 0.0)
+        row_sums = query.sum(dim=1).to_dense().clamp(min=1e-6)
+        indices = query.indices()
+        values = query.values() / row_sums[indices[0]]
+        normalized = torch.sparse_coo_tensor(indices, values, query.shape).coalesce()
 
-        D_inv = torch.sparse_coo_tensor(
-            torch.stack([torch.arange(query.size(0)), torch.arange(query.size(0))]).to(device),
-            inv,
-            query.shape
-        )
-
-        normalized = sp.mm(D_inv, query)
         return sp.mm(normalized, ref)
 
 
