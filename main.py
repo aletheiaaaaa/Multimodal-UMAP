@@ -47,21 +47,21 @@ if __name__ == "__main__":
         test_epochs=args.test_epochs
     )
 
-    # train_split = load_data(split="train")
-    test_split = load_data(split="test")
+    train_split = load_data(split="train")
+    # test_split = load_data(split="test")
 
     if args.load_pretrained == "yes":
         model = UMAPMixture.load_state_dict(args.save_path)
     else:
-        model = train(test_split, cfg)
+        model = train(train_split, cfg)
 
     if args.save_path is not None:
         model.save_state_dict(args.save_path)
 
-    similarity_test(test_split, cfg, model=model)
-    knn_test(test_split, cfg, k=args.k_test, model=model)
+    similarity_test(train_split, cfg, model=model)
+    knn_test(train_split, cfg, k=args.k_test, model=model)
 
     if args.crossmodal == "yes":
-        indices = torch.randperm(test_split["texts"].shape[0])[:16]
-        samples = list(v[indices] for v in test_split.values())
+        indices = torch.randperm(train_split["texts"].shape[0])[:16]
+        samples = list(v[indices] for v in train_split.values())
         crossmodal_recon(samples, cfg, model=model)
