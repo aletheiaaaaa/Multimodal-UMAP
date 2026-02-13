@@ -13,7 +13,7 @@ def init_parser() -> argparse.Namespace:
 
     parser.add_argument("--k_neighbors", type=int, default=15, help="Number of neighbors for UMAP")
     parser.add_argument("--out_dim", type=int, default=64, help="Output embedding dimension")
-    parser.add_argument("--min_dist", type=float, default=0.1, help="Minimum distance for UMAP")
+    parser.add_argument("--min_dist", type=float, default=0.01, help="Minimum distance for UMAP")
 
     parser.add_argument("--train_epochs", type=int, default=400, help="Number of training epochs")
     parser.add_argument("--num_rep", type=int, default=8, help="Number of repulsive points for UMAP")
