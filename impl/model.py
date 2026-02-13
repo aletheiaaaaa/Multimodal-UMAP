@@ -1,7 +1,6 @@
 import torch
 import os
 import numpy as np
-from pynndescent import NNDescent
 from torch import linalg as LA
 from torch import sparse as sp
 from torch import autograd
