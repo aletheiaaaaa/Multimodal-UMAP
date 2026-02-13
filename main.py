@@ -77,6 +77,8 @@ if __name__ == "__main__":
     if args.save_path is not None:
         model.save_state_dict(args.save_path)
 
+    plot_embeddings(model.embeds[0], model.embeds[1], title="Train", path="train_overlay.png")
+
     similarity_test(test_split, cfg, model=model)
     knn_test(test_split, cfg, k=args.k_test, model=model)
 
