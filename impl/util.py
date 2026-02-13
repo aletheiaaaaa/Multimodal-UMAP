@@ -14,7 +14,8 @@ class Config:
         min_dist: Minimum distance parameter for UMAP curve fitting.
         train_epochs: Number of epochs for model training.
         num_rep: Number of negative samples per positive for repulsion loss.
-        lr: Learning rate for optimizer.
+        train_lr: Learning rate for training.
+        test_lr: Learning rate for transform/inverse_transform.
         alpha: Weight for InfoNCE cross-modal alignment loss.
         batch_size: Batch size for training.
         test_epochs: Number of epochs for transform/inverse_transform.
@@ -25,7 +26,8 @@ class Config:
 
     train_epochs: int
     num_rep: int
-    lr: float
+    train_lr: float
+    test_lr: float
     alpha: float
     batch_size: int
 
@@ -54,7 +56,7 @@ def train(data: dict, cfg: Config) -> UMAPMixture:
         data,
         epochs=cfg.train_epochs,
         num_rep=cfg.num_rep,
-        lr=cfg.lr,
+        lr=cfg.train_lr,
         alpha=cfg.alpha,
         batch_size=cfg.batch_size,
     )
@@ -80,7 +82,7 @@ def embed(model: UMAPMixture, data: list[torch.Tensor], src: list[int], cfg: Con
         epochs=cfg.test_epochs,
         data_indices=src,
         num_rep=cfg.num_rep,
-        lr=cfg.lr,
+        lr=cfg.test_lr,
         alpha=cfg.alpha,
         batch_size=cfg.batch_size
     )
@@ -106,7 +108,7 @@ def recon(model: UMAPMixture, embeds: list[torch.Tensor], dst: list[int], cfg: C
         epochs=cfg.test_epochs,
         data_indices=dst,
         num_rep=cfg.num_rep,
-        lr=cfg.lr,
+        lr=cfg.test_lr,
         alpha=cfg.alpha,
         batch_size=cfg.batch_size
     )

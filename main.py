@@ -17,7 +17,8 @@ def init_parser() -> argparse.Namespace:
 
     parser.add_argument("--train_epochs", type=int, default=400, help="Number of training epochs")
     parser.add_argument("--num_rep", type=int, default=8, help="Number of repulsive points for UMAP")
-    parser.add_argument("--lr", type=float, default=0.1, help="Learning rate")
+    parser.add_argument("--train_lr", type=float, default=0.1, help="Training learning rate")
+    parser.add_argument("--test_lr", type=float, default=0.001, help="Test/transform learning rate")
     parser.add_argument("--alpha", type=float, default=1.0, help="Cross-modal alignment weight")
     parser.add_argument("--batch_size", type=int, default=256, help="Batch size")
     parser.add_argument("--log_dir", type=str, default=None, help="Directory to log training losses")
@@ -41,7 +42,8 @@ if __name__ == "__main__":
         min_dist=args.min_dist,
         train_epochs=args.train_epochs,
         num_rep=args.num_rep,
-        lr=args.lr,
+        train_lr=args.train_lr,
+        test_lr=args.test_lr,
         alpha=args.alpha,
         batch_size=args.batch_size,
         test_epochs=args.test_epochs
