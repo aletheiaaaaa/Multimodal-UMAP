@@ -5,7 +5,6 @@ from torch import linalg as LA
 from torch import sparse as sp
 from torch import autograd
 from torch import optim
-from torch.optim.lr_scheduler import LinearLR
 from torch.autograd import functional as AF
 from torch.nn import functional as F
 from tqdm import tqdm
@@ -424,7 +423,6 @@ class UMAPMixture:
                 ref.requires_grad = False
 
         optimizer = optim.Adam(embeds, lr=lr)
-        # scheduler = LinearLR(optimizer, start_factor=1.0, end_factor=0.1, total_iters=epochs)
 
         pbar = tqdm(range(epochs), desc=desc)
         for epoch in pbar:
@@ -496,7 +494,6 @@ class UMAPMixture:
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            # scheduler.step()
 
             if epoch % 10 == 0 or epoch == epochs - 1:
                 umap_total = sum(embed_losses).item()
@@ -588,7 +585,7 @@ class UMAPMixture:
             graphs,
             epochs,
             num_rep,
-            0.05 * lr,
+            0.1 * lr,
             alpha,
             batch_size,
             mode="transform",
