@@ -128,36 +128,3 @@ def embed_and_recon(model: UMAPMixture, data: list[torch.Tensor], src: list[int]
     """
     embeds = embed(model, data, src, cfg)
     return recon(model, embeds, dst, cfg)
-
-def embed_and_plot(model: UMAPMixture, data: list[torch.Tensor], src: list[int], cfg: Config) -> list[torch.Tensor]:
-    """Embed data and plot the resulting embeddings in 2D space.
-
-    Args:
-        model: Trained UMAPMixture model.
-        data: List of tensors to embed and plot.
-        src: Encoder indices specifying which encoder to use for each input.
-        cfg: Configuration object with inference hyperparameters.
-
-    Returns:
-        List of embedding tensors in the shared latent space.
-    """
-
-    embeds = embed(model, data, src, cfg)
-
-    if cfg.out_dim != 2:
-        print("Output dimension is not 2, skipping plotting.")
-        return embeds
-
-    colors = ['red', 'blue', 'green', 'orange', 'purple', 'cyan', 'magenta', 'yellow']
-    for i, embed in enumerate(embeds):
-        plt.scatter(embed[:, 0].cpu(), embed[:, 1].cpu(), color=colors[i % len(colors)], label=f'Modality {src[i]}', alpha=0.5)
-    plt.legend()
-    plt.title("UMAP Embeddings")
-    plt.xlabel("Dimension 1")
-    plt.ylabel("Dimension 2")
-    plt.grid(True)
-    plt.show()
-
-    plt.savefig("images/umap_embeddings.png")
-
-    return embeds

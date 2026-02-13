@@ -4,7 +4,7 @@ import os
 
 from impl.validation import similarity_test, knn_test
 from impl.crossmodal import crossmodal_recon
-from impl.util import Config, train, embed_and_plot
+from impl.util import Config, train
 from impl.dataset import load_data
 from impl.model import UMAPMixture
 
@@ -47,21 +47,19 @@ if __name__ == "__main__":
         test_epochs=args.test_epochs
     )
 
-    train_split = load_data(split="train")
+    # train_split = load_data(split="train")
     test_split = load_data(split="test")
 
     if args.load_pretrained == "yes":
         model = UMAPMixture.load_state_dict(args.save_path)
     else:
-        model = train(train_split, cfg)
+        model = train(test_split, cfg)
 
     if args.save_path is not None:
         model.save_state_dict(args.save_path)
 
     similarity_test(test_split, cfg, model=model)
     knn_test(test_split, cfg, k=args.k_test, model=model)
-
-    embed_and_plot(model, test_split, [0, 1], cfg)
 
     if args.crossmodal == "yes":
         indices = torch.randperm(test_split["texts"].shape[0])[:16]
