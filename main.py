@@ -8,11 +8,14 @@ from impl.util import Config, train
 from impl.dataset import load_data
 from impl.model import UMAPMixture
 
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+
 def init_parser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Cross-modal UMAP Mixture Model Experiments")
 
     parser.add_argument("--k_neighbors", type=int, default=15, help="Number of neighbors for UMAP")
-    parser.add_argument("--out_dim", type=int, default=64, help="Output embedding dimension")
+    parser.add_argument("--out_dim", type=int, default=2, help="Output embedding dimension")
     parser.add_argument("--min_dist", type=float, default=0.01, help="Minimum distance for UMAP")
 
     parser.add_argument("--train_epochs", type=int, default=400, help="Number of training epochs")
@@ -33,6 +36,20 @@ def init_parser() -> argparse.Namespace:
     args = parser.parse_args()
 
     return args
+
+def plot_embeddings(embeds_0, embeds_1, title="Embedding Overlay", path="embed_overlay.png"):
+    combined = torch.cat([embeds_0, embeds_1], dim=0).detach().cpu().numpy()
+    coords = PCA(n_components=2).fit_transform(combined)
+    n = embeds_0.shape[0]
+    plt.figure(figsize=(8, 8))
+    plt.scatter(coords[n:, 0], coords[n:, 1], s=4, alpha=0.4, label="mod1", c="tab:orange")
+    plt.scatter(coords[:n, 0], coords[:n, 1], s=4, alpha=0.4, label="mod0", c="tab:blue")
+    plt.legend()
+    plt.title(title)
+    plt.tight_layout()
+    plt.savefig(path, dpi=150)
+    plt.close()
+    print(f"Saved {path}")
 
 if __name__ == "__main__":
     args = init_parser()
