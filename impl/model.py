@@ -379,6 +379,10 @@ class UMAPMixture:
         loss = -torch.log(1 - weight + 1e-6).mean()
         return loss
 
+    def _mse_loss(self, embeds_0: torch.Tensor, embeds_1: torch.Tensor) -> torch.Tensor:
+        n = min(embeds_0.size(0), embeds_1.size(0))
+        return (embeds_0[:n] - embeds_1[:n]).pow(2).sum(dim=1).mean()
+
     def _infonce_loss(self, embeds_0: torch.Tensor, embeds_1: torch.Tensor, n_neg: int = 128, temperature: float = 0.1) -> torch.Tensor:
         num_samples = min(embeds_0.size(0), embeds_1.size(0))
         if num_samples == 0:
@@ -480,9 +484,7 @@ class UMAPMixture:
 
                 for i in range(num_embeds):
                     for j in range(i + 1, num_embeds):
-                        align_ij = self._infonce_loss(embeds[i], embeds[j])
-                        align_ji = self._infonce_loss(embeds[j], embeds[i])
-                        align_loss = (align_ij + align_ji) / 2
+                        align_loss = self._mse_loss(embeds[i], embeds[j])
 
                         align_losses[i] = align_losses[i] + alpha * align_loss
                         align_losses[j] = align_losses[j] + alpha * align_loss
