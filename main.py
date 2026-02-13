@@ -10,6 +10,7 @@ from impl.model import UMAPMixture
 
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
+import umap
 
 def init_parser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Cross-modal UMAP Mixture Model Experiments")
@@ -51,6 +52,21 @@ def plot_embeddings(embeds_0, embeds_1, title="Embedding Overlay", path="embed_o
     plt.close()
     print(f"Saved {path}")
 
+def plot_baseline(train_split, path="baseline_overlay.png"):
+    texts_np = train_split["texts"].cpu().numpy()
+    images_np = train_split["images"].cpu().numpy()
+    text_embeds = umap.UMAP(n_components=2).fit_transform(texts_np)
+    image_embeds = umap.UMAP(n_components=2).fit_transform(images_np)
+    plt.figure(figsize=(8, 8))
+    plt.scatter(image_embeds[:, 0], image_embeds[:, 1], s=4, alpha=0.4, label="images", c="tab:orange")
+    plt.scatter(text_embeds[:, 0], text_embeds[:, 1], s=4, alpha=0.4, label="texts", c="tab:blue")
+    plt.legend()
+    plt.title("Baseline: Independent UMAP per modality")
+    plt.tight_layout()
+    plt.savefig(path, dpi=150)
+    plt.close()
+    print(f"Saved {path}")
+
 if __name__ == "__main__":
     args = init_parser()
     cfg = Config(
@@ -68,6 +84,8 @@ if __name__ == "__main__":
 
     train_split = load_data(split="train")
     test_split = load_data(split="test")
+
+    plot_baseline(train_split)
 
     if args.load_pretrained == "yes":
         model = UMAPMixture.load_state_dict(args.save_path)
