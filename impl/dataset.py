@@ -1,7 +1,8 @@
 import torch
 import os
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModel, AutoImageProcessor
+from transformers import AutoTokenizer, AutoModel
+from torchvision.transforms import functional as TF
 from tqdm import tqdm
 
 def load_data(split: str) -> dict:
@@ -30,8 +31,7 @@ def load_data(split: str) -> dict:
     text_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
     text_model = AutoModel.from_pretrained("google-bert/bert-base-uncased").to(device)
 
-    image_processor = AutoImageProcessor.from_pretrained("facebook/dinov2-base")
-    image_model = AutoModel.from_pretrained("facebook/dinov2-base").to(device)
+    image_size = 32
 
     texts = []
     images = []
@@ -45,9 +45,8 @@ def load_data(split: str) -> dict:
             text_features = text_model(**encoded_input).pooler_output
         texts.append(text_features)
 
-        processed_images = image_processor(images=image_list, return_tensors="pt").to(device)
-        with torch.no_grad():
-            image_features = image_model(**processed_images).last_hidden_state[:, 0]
+        image_tensors = [TF.resize(TF.to_tensor(img.convert("RGB")), [image_size, image_size]) for img in image_list]
+        image_features = torch.stack(image_tensors).flatten(1).to(device)
         images.append(image_features)
 
     data_dict = {
